@@ -1,0 +1,55 @@
+/*
+            for event in client.events() {
+                let deserialized: RequestBenchEvent = serde_json::from_slice(&event.msg).unwrap();
+                run_check_for_url(deserialized.url.as_str(), &cloned_args);
+            }
+*/
+/*
+    let c = RequestBenchEvent {
+        labels: [
+            ("label1".to_owned(), "plop".to_owned()),
+            ("label2".to_owned(), "plop2".to_owned()),
+            ("label3".to_owned(), "plop3".to_owned()),
+        ].iter()
+            .cloned()
+            .collect(),
+        url: "http://wwww.clever-cloud.com/".to_owned(),
+        checks: Checks {
+            latency: CheckCreds {
+                class_name: "com.test".to_owned(),
+                labels: None,
+            },
+            status: CheckCreds {
+                class_name: "com.test".to_owned(),
+                labels: None,
+            },
+        },
+    };
+
+    // Convert the Point to a JSON string.
+    let serialized = serde_json::to_string(&c).unwrap();
+
+    // Prints serialized = {"x":1,"y":2}
+    println!("serialized = {}", serialized);
+
+    let json = r#"{
+  "labels": {
+    "a": "b"
+  },
+  "url": "https://www.clever-cloud.com",
+  "checks": {
+    "latency": {
+      "class_name": "poke.http.latency",
+      "labels": {
+        "c": "d"
+      }
+    },
+    "status": {
+      "class_name": "poke.http.status"
+    }
+  }
+}"#;
+
+    let deserialized: RequestBenchEvent = serde_json::from_str(&json).unwrap();
+    println!("unjson : {:#?}", deserialized);
+*/
