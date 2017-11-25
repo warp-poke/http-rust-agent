@@ -41,7 +41,7 @@ enum Cmd {
     },
 }
 
-
+static animals = vec!["🐶", "🐱", "🐭"];
 
 #[derive(Debug)]
 struct DomainTestResult {
