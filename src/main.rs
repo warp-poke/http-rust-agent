@@ -94,6 +94,25 @@ struct DomainTestResult {
     content_length: u64,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+enum CheckType {
+    Latency,
+    Status,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct CheckCreds {
+    className: String,
+    labels: Option<HashMap<String, String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RequestBenchEvent {
+    labels: HashMap<String, String>,
+    url: String,
+    checks: HashMap<CheckType, CheckCreds>,
+}
+
 
 fn run_check_for_url(url: &str, domain_name: &str, args: &Opt) -> Result<DomainTestResult> {
     let client = Client::new();
