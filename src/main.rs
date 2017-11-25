@@ -177,11 +177,4 @@ fn main() {
         }
     }
 
-
-
-
-    /*
-    let mut content = String::new();
-    resp.read_to_string(&mut content);
-*/
 }
