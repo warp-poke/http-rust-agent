@@ -9,8 +9,10 @@ use structopt::StructOpt;
 use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
 use time::{Duration, SteadyTime};
+use std::collections::HashSet;
 
-#[derive(StructOpt, Debug)]
+
+#[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
 struct Opt {
     #[structopt(short = "d", long = "debug", help = "Activate debug mode")]
@@ -18,11 +20,28 @@ struct Opt {
 
     #[structopt(short = "v", long = "verbose", help = "Activate verbose mode")]
     verbose: bool,
-
-    /// Needed parameter, the first on the command line.
-    #[structopt(help = "domaine name")]
-    domain_name: String,
+    #[structopt(subcommand)]
+    cmd: Cmd,
 }
+
+#[derive(StructOpt, PartialEq, Debug, Clone)]
+enum Cmd {
+    #[structopt(name = "once")]
+    Once {
+        /// Needed parameter, the first on the command line.
+        #[structopt(help = "domaine name")]
+        domain_name: String,
+    },
+
+    #[structopt(name = "daemon")]
+    Daemon {
+        /// Needed parameter, the first on the command line.
+        #[structopt(help = "url of the nats server")]
+        nats_url: String,
+    },
+}
+
+
 
 #[derive(Debug)]
 struct DomainTestResult {
@@ -34,7 +53,7 @@ struct DomainTestResult {
 }
 
 
-fn run_check_for_url(url: &str, domain_name: &str) -> Result<DomainTestResult> {
+fn run_check_for_url(url: &str, domain_name: &str, args: &Opt) -> Result<DomainTestResult> {
     let client = Client::new();
     let start = SteadyTime::now();
     let res = client.get(url).send()?;
@@ -55,29 +74,61 @@ fn run_check_for_url(url: &str, domain_name: &str) -> Result<DomainTestResult> {
             .unwrap_or(0u64),
     };
 
-    println!("Headers:\n{}", res.headers());
+    if args.verbose {
+        println!("{}------ {} ------", url, url);
+        println!("{} ----- Status: {}", url, res.status());
+        println!("{} ----- Headers:\n{}", url, res.headers());
+    }
     Ok(dtr)
 }
 
-fn run(domain_name: &str) -> Result<(Result<DomainTestResult>, Result<DomainTestResult>)> {
-    let http = run_check_for_url(format!("http://{}", domain_name).as_str(), domain_name);
-    let https = run_check_for_url(format!("https://{}", domain_name).as_str(), domain_name);
+fn run(
+    domain_name: &str,
+    args: Opt,
+) -> Result<(Result<DomainTestResult>, Result<DomainTestResult>)> {
+    let http = run_check_for_url(
+        format!("http://{}", domain_name).as_str(),
+        domain_name,
+        &args,
+    );
+    let https = run_check_for_url(
+        format!("https://{}", domain_name).as_str(),
+        domain_name,
+        &args,
+    );
 
     Ok((http, https))
 }
 
 
 fn main() {
-    let opt = Opt::from_args();
+    let args = Opt::from_args();
 
-    let rr = run(opt.domain_name.as_str());
 
-    println!("{:#?}", rr);
+    if args.debug {
+        println!("CLI arguments parsing : {:#?}", args);
+    }
+
+    let cloned_args = args.clone();
+
+    match args.cmd {
+        Cmd::Once { domain_name } => {
+            let rr = run(domain_name.as_str(), cloned_args);
+
+            println!("{:#?}", rr);
+        }
+        Cmd::Daemon { nats_url } => {
+            println!("I need to launch daemon");
+
+
+        }
+    }
+
+
 
 
     /*
     let mut content = String::new();
     resp.read_to_string(&mut content);
 */
-    println!("{:?}", opt);
 }
