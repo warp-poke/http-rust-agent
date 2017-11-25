@@ -7,6 +7,8 @@ extern crate time;
 use structopt::StructOpt;
 
 use reqwest::{Client, Result};
+use reqwest::header::ContentLength;
+use time::{Duration, SteadyTime};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -22,32 +24,55 @@ struct Opt {
     domain_name: String,
 }
 
+#[derive(Debug)]
+struct DomainTestResult {
+    domain_name: String,
+    url: String,
+    http_status: reqwest::StatusCode,
+    answer_time: Duration,
+    content_length: u64,
+}
 
-fn run(domain_name: &str) -> Result<()> {
+
+fn run_check_for_url(url: &str, domain_name: &str) -> Result<DomainTestResult> {
     let client = Client::new();
-    let res = client
-        .get(format!("http://{}", domain_name).as_str())
-        .send()?;
-    let res_ssl = client
-        .get(format!("https://{}", domain_name).as_str())
-        .send()?;
+    let start = SteadyTime::now();
+    let res = client.get(url).send()?;
+    let dur = SteadyTime::now() - start;
 
-    println!("Status: {}", res.status());
+    //  build infos
+    let dtr = DomainTestResult {
+        domain_name: domain_name.to_owned(),
+        url: url.to_owned(),
+        http_status: res.status(),
+        answer_time: dur,
+        content_length: res.headers()
+            .get::<ContentLength>()
+            .cloned()
+            .map(|ct| match ct {
+                ContentLength(u) => u,
+            })
+            .unwrap_or(0u64),
+    };
+
     println!("Headers:\n{}", res.headers());
-    println!("Status: {}", res_ssl.status());
-    println!("Headers:\n{}", res_ssl.headers());
+    Ok(dtr)
+}
 
+fn run(domain_name: &str) -> Result<(Result<DomainTestResult>, Result<DomainTestResult>)> {
+    let http = run_check_for_url(format!("http://{}", domain_name).as_str(), domain_name);
+    let https = run_check_for_url(format!("https://{}", domain_name).as_str(), domain_name);
 
-    println!("\n\nDone.");
-    Ok(())
+    Ok((http, https))
 }
 
 
 fn main() {
     let opt = Opt::from_args();
 
-    run(opt.domain_name.as_str());
+    let rr = run(opt.domain_name.as_str());
 
+    println!("{:#?}", rr);
 
 
     /*
