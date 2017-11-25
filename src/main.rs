@@ -74,7 +74,6 @@ pub const ANIMALS: &'static [&'static str] = &[
     "🐱",
     "🐭",
     "🐹",
-    "🐰",
     "🦊",
     "🐻",
     "🐼",
