@@ -449,6 +449,7 @@ name = "poke-agent"
 version = "0.1.0"
 dependencies = [
  "nats 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.3.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "structopt-derive 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",

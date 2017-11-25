@@ -3,13 +3,14 @@ extern crate structopt;
 extern crate structopt_derive;
 extern crate reqwest;
 extern crate time;
+extern crate rand;
 
+use rand::{thread_rng, Rng};
 use structopt::StructOpt;
 
 use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
 use time::{Duration, SteadyTime};
-use std::collections::HashSet;
 
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
@@ -41,7 +42,33 @@ enum Cmd {
     },
 }
 
-static animals = vec!["🐶", "🐱", "🐭"];
+pub const ANIMALS: &'static [&'static str] = &[
+    "🐶",
+    "🐱",
+    "🐭",
+    "🐹",
+    "🐰",
+    "🦊",
+    "🐻",
+    "🐼",
+    "🐨",
+    "🐯",
+    "🦁",
+    "🐮",
+    "🐷",
+    "🐸",
+    "🐒",
+    "🦆",
+    "🦉",
+    "🦀",
+    "🐡",
+    "🦑",
+    "🐙",
+    "🦎",
+    "🐿",
+    "🐕",
+    "🐁",
+];
 
 #[derive(Debug)]
 struct DomainTestResult {
@@ -75,9 +102,15 @@ fn run_check_for_url(url: &str, domain_name: &str, args: &Opt) -> Result<DomainT
     };
 
     if args.verbose {
-        println!("{}------ {} ------", url, url);
-        println!("{} ----- Status: {}", url, res.status());
-        println!("{} ----- Headers:\n{}", url, res.headers());
+        let mut rng = thread_rng();
+        let animal = rng.choose(ANIMALS).unwrap();
+
+        println!("{}  - {} ------", animal, url);
+        println!("{}  --- Status: {}", animal, res.status());
+        println!("{}  --- Headers:", animal);
+        for h in res.headers().iter() {
+            println!("{}  ----- {}: {:?}", animal, h.name(), h.value_string());
+        }
     }
     Ok(dtr)
 }
