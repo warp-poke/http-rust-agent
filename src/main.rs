@@ -4,6 +4,7 @@ extern crate structopt_derive;
 extern crate reqwest;
 extern crate time;
 extern crate rand;
+extern crate nats;
 
 use rand::{thread_rng, Rng};
 use structopt::StructOpt;
@@ -11,6 +12,7 @@ use structopt::StructOpt;
 use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
 use time::{Duration, SteadyTime};
+use nats::*;
 
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
@@ -38,6 +40,7 @@ enum Cmd {
     Daemon {
         /// Needed parameter, the first on the command line.
         #[structopt(help = "url of the nats server")]
+        // TODO manage NATS cluster (multiples url)
         nats_url: String,
     },
 }
@@ -163,8 +166,13 @@ fn main() {
             println!("{:#?}", rr);
         }
         Cmd::Daemon { nats_url } => {
-            println!("I need to launch daemon");
-
+            println!("Connect to NATS server....");
+            let mut client = nats::Client::new(nats_url).unwrap();
+            let s2 = client.subscribe("subject.*", Some("http-agent")).unwrap();
+            for event in client.events() {
+                println!("{:#?}", event);
+                println!("{:#?}", String::from_utf8(event.msg));
+            }
 
         }
     }
