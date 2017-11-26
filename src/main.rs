@@ -296,13 +296,10 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
             }),
     ).unwrap();
 
-
 }
 
 fn main() {
     let args = Opt::from_args();
-
-
 
     if args.debug {
         println!("CLI arguments parsing : {:#?}", args);
