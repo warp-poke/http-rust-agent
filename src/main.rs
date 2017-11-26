@@ -22,7 +22,6 @@ use lapin::client::ConnectionOptions;
 use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
 use lapin::types::FieldTable;
 
-
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use structopt::StructOpt;
@@ -209,12 +208,6 @@ fn main() {
             let exchange_name = "checks.http";
             let consumer_id = format!("http-rust-agent-{}", Uuid::new_v4());
 
-
-
-
-
-
-
             core.run(
                 TcpStream::connect(&addr, &handle)
                     .and_then(|stream| {
@@ -260,7 +253,6 @@ fn main() {
                                     )
                                     .and_then(move |_| {
                                         println!(" 🐇  Exchange {} declared", exchange_name);
-
                                         channel
                                             .queue_bind(
                                                 queue_name.as_str(),
@@ -291,7 +283,7 @@ fn main() {
                                                                     deserialized
                                                                 );
                                                             }
-                                                            run_check_for_url(deserialized.url.as_str(), &cloned_args);
+                                                            let _res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
                                                             ch.basic_ack(message.delivery_tag);
                                                             Ok(())
                                                         })
