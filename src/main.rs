@@ -281,11 +281,11 @@ fn main() {
                                                     .and_then(|stream| {
                                                         println!(" 🐇  got consumer stream, ready.");
                                                         stream.for_each(move |message| {
-                                                            if args.debug {
+                                                            if cloned_args.debug {
                                                                 println!(" 🐇  got message: {:?}", message);
                                                             }
                                                             let deserialized:RequestBenchEvent=serde_json::from_slice(&message.data).unwrap();
-                                                            if args.verbose {
+                                                            if cloned_args.verbose {
                                                                 println!(
                                                                     " 🐇  deserialized message get from rabbitmq: {:?}",
                                                                     deserialized
