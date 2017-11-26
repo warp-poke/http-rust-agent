@@ -19,8 +19,7 @@ use futures::future::Future;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use lapin::client::ConnectionOptions;
-use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions,
-                     QueueDeclareOptions};
+use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
 use lapin::types::FieldTable;
 
 
@@ -172,10 +171,7 @@ fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
     Ok(dtr)
 }
 
-fn run(
-    domain_name: &str,
-    args: Opt,
-) -> Result<(Result<DomainTestResult>, Result<DomainTestResult>)> {
+fn run(domain_name: &str, args: Opt) -> Result<(Result<DomainTestResult>, Result<DomainTestResult>)> {
     let http = run_check_for_url(format!("http://{}", domain_name).as_str(), &args);
     let https = run_check_for_url(format!("https://{}", domain_name).as_str(), &args);
 
@@ -274,11 +270,7 @@ fn main() {
                                                 &FieldTable::new(),
                                             )
                                             .and_then(move |_| {
-                                                println!(
-                                                    " 🐇  Queue {} bind to {}",
-                                                    queue_name,
-                                                    exchange_name
-                                                );
+                                                println!(" 🐇  Queue {} bind to {}", queue_name, exchange_name);
                                                 channel
                                                     .basic_consume(
                                                         queue_name.as_str(),
@@ -287,21 +279,19 @@ fn main() {
                                                         &FieldTable::new(),
                                                     )
                                                     .and_then(|stream| {
-                                                        println!(
-                                                            " 🐇  got consumer stream, ready."
-                                                        );
+                                                        println!(" 🐇  got consumer stream, ready.");
                                                         stream.for_each(move |message| {
                                                             if args.debug {
                                                                 println!(" 🐇  got message: {:?}", message);
                                                             }
                                                             let deserialized:RequestBenchEvent=serde_json::from_slice(&message.data).unwrap();
-                                                                                            if args.verbose {
-                                                                println!(" 🐇  deserialized message get from rabbitmq: {:?}", deserialized);
+                                                            if args.verbose {
+                                                                println!(
+                                                                    " 🐇  deserialized message get from rabbitmq: {:?}",
+                                                                    deserialized
+                                                                );
                                                             }
-                                                            run_check_for_url(
-                                                                deserialized.url.as_str(),
-                                                                &cloned_args,
-                                                            );
+                                                            run_check_for_url(deserialized.url.as_str(), &cloned_args);
                                                             ch.basic_ack(message.delivery_tag);
                                                             Ok(())
                                                         })
