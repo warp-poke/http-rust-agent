@@ -32,6 +32,9 @@ use time::{Duration, SteadyTime};
 use uuid::Uuid;
 use std::error::Error;
 
+use std::sync::mpsc::{channel, Sender, Receiver};
+use std::thread;
+
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
 struct Opt {
@@ -55,6 +58,9 @@ enum Cmd {
 
     #[structopt(name = "daemon")]
     Daemon {
+
+        #[structopt(short = "s", long = "buffer_in_seconds",parse(try_from_str), default_value = "10", help = "Time in seconds, for buffer to send data in warp10")]
+        buffer_in_seconds: u64,
         /// Needed parameter, the first on the command line.
         #[structopt(help = "url of the nats server")]
         // TODO manage NATS cluster (multiples url)
@@ -180,9 +186,19 @@ fn warp10_post(data: &[(u64, ChecksResult)]) -> std::result::Result<(), Box<Erro
 }
 
 
-fn daemonify(rabbitmq_url: String, cloned_args: Opt) {
+fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
     println!(" 🐇  Connect to rabbitMQ server using 🐰:");
 
+    let (sender, receiver): (Sender<String>, Receiver<String>) = channel();
+    thread::spawn(move || loop {
+        thread::sleep(std::time::Duration::from_secs(buffer_in_seconds));
+        let mut iter = receiver.try_iter();
+                    println!("loop");
+
+        for x in iter{
+            println!("{:#?}", x);
+        }
+    });
 
     // create the reactor
     let mut core = Core::new().unwrap();
@@ -269,6 +285,7 @@ fn daemonify(rabbitmq_url: String, cloned_args: Opt) {
                                                         );
                                                     }
                                                     let _res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
+                                                    sender.send(format!("{:?}", _res));
                                                     ch.basic_ack(message.delivery_tag);
                                                     Ok(())
                                                 })
@@ -299,7 +316,7 @@ fn main() {
 
             println!("{:#?}", rr);
         }
-        Cmd::Daemon { rabbitmq_url } => daemonify(rabbitmq_url, cloned_args),
+        Cmd::Daemon { buffer_in_seconds, rabbitmq_url } => daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
     }
 
 }
