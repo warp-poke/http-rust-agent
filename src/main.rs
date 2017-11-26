@@ -21,6 +21,7 @@ use tokio_core::net::TcpStream;
 use lapin::client::ConnectionOptions;
 use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
 use lapin::types::FieldTable;
+use lapin::channel::Channel;
 
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
@@ -28,9 +29,12 @@ use structopt::StructOpt;
 
 use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
-use time::{Duration, SteadyTime};
+use time::{Duration, SteadyTime, PreciseTime};
 use uuid::Uuid;
 use std::error::Error;
+
+use std::fmt;
+use std::sync::{Arc, Mutex};
 
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
@@ -58,8 +62,8 @@ enum Cmd {
 
     #[structopt(name = "daemon")]
     Daemon {
-
-        #[structopt(short = "s", long = "buffer_in_seconds",parse(try_from_str), default_value = "10", help = "Time in seconds, for buffer to send data in warp10")]
+        #[structopt(short = "s", long = "buffer_in_seconds", parse(try_from_str), default_value = "10",
+                    help = "Time in seconds, for buffer to send data in warp10")]
         buffer_in_seconds: u64,
         /// Needed parameter, the first on the command line.
         #[structopt(help = "url of the nats server")]
@@ -136,6 +140,14 @@ struct RequestBenchEvent {
 }
 
 
+struct BufferedDomainTestResult {
+    domain_test_results: Result<DomainTestResult>,
+    timestamp: time::PreciseTime,
+    delivery_tag: u64,
+}
+
+
+
 fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
     let client = Client::new();
     let start = SteadyTime::now();
@@ -186,17 +198,23 @@ fn warp10_post(data: &[(u64, ChecksResult)]) -> std::result::Result<(), Box<Erro
 }
 
 
-fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
+fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
     println!(" 🐇  Connect to rabbitMQ server using 🐰:");
 
-    let (sender, receiver): (Sender<String>, Receiver<String>) = channel();
+    let (sender, receiver): (Sender<BufferedDomainTestResult>, Receiver<BufferedDomainTestResult>) = channel();
+    let (sender_ack, receiver_ack): (Sender<u64>, Receiver<u64>) = channel();
+
+    let re_cloned_args = cloned_args.clone();
     thread::spawn(move || loop {
         thread::sleep(std::time::Duration::from_secs(buffer_in_seconds));
+        if re_cloned_args.debug {
+            println!(" ⏰  loop tick every {}s", buffer_in_seconds);
+        }
         let mut iter = receiver.try_iter();
-                    println!("loop");
 
-        for x in iter{
-            println!("{:#?}", x);
+        for x in iter {
+            println!("{:?}", x.domain_test_results);
+            sender_ack.send(x.delivery_tag);
         }
     });
 
@@ -205,7 +223,7 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
     let handle = core.handle();
     let addr = rabbitmq_url.parse().unwrap();
 
-    let queue_name = format!("http-agent-{}", Uuid::new_v4());
+    let queue_name = "http-agent-queue"; //format!("http-agent-{}", Uuid::new_v4());
     let exchange_name = "checks.http";
     let consumer_id = format!("http-rust-agent-{}", Uuid::new_v4());
 
@@ -241,7 +259,7 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
                     nowait: qdod.nowait,
                 };
                 channel
-                    .queue_declare(queue_name.as_str(), &qdo, &FieldTable::new())
+                    .queue_declare(queue_name, &qdo, &FieldTable::new())
                     .and_then(move |_| {
                         println!(" 🐇  Channel {} declared queue {}", id, queue_name);
 
@@ -256,7 +274,7 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
                                 println!(" 🐇  Exchange {} declared", exchange_name);
                                 channel
                                     .queue_bind(
-                                        queue_name.as_str(),
+                                        queue_name,
                                         exchange_name,
                                         "",
                                         &QueueBindOptions::default(),
@@ -264,15 +282,47 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
                                     )
                                     .and_then(move |_| {
                                         println!(" 🐇  Queue {} bind to {}", queue_name, exchange_name);
+
+                                        let bcod = &BasicConsumeOptions::default();
+                                        let bco = BasicConsumeOptions {
+                                            ticket: bcod.ticket,
+                                            no_local: bcod.no_local,
+                                            no_ack: false,
+                                            exclusive: bcod.exclusive,
+                                            no_wait: bcod.no_wait,
+                                        };
                                         channel
-                                            .basic_consume(
-                                                queue_name.as_str(),
-                                                consumer_id.as_str(),
-                                                &BasicConsumeOptions::default(),
-                                                &FieldTable::new(),
-                                            )
+                                            .basic_consume(queue_name, consumer_id.as_str(), &bco, &FieldTable::new())
                                             .and_then(|stream| {
                                                 println!(" 🐇  got consumer stream, ready.");
+
+                                                let re_cloned_args = cloned_args.clone();
+
+                                                let shared_channel = Arc::new(Mutex::new(channel));
+                                                thread::spawn(move || {
+                                                    loop {
+                                                        thread::sleep(std::time::Duration::from_secs(1));
+                                                        let mut iter = receiver_ack.try_iter();
+                                                        let mut shared_channel = shared_channel.try_lock();
+
+                                                        if let Ok(ref mut shared_channel) = shared_channel {
+                                                            for x in iter {
+                                                                if re_cloned_args.debug {
+                                                                    println!(" 🐇  👌  ACK for message id {:?}", x);
+                                                                }
+                                                                shared_channel.basic_ack(x);
+                                                            }
+                                                        } else {
+                                                            println!("try_lock failed");
+                                                        }
+
+
+
+                                                    }
+                                                });
+
+
+
                                                 stream.for_each(move |message| {
                                                     if cloned_args.debug {
                                                         println!(" 🐇  got message: {:?}", message);
@@ -284,9 +334,23 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds:u64, cloned_args: Opt) {
                                                             deserialized
                                                         );
                                                     }
-                                                    let _res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
-                                                    sender.send(format!("{:?}", _res));
-                                                    ch.basic_ack(message.delivery_tag);
+                                                    let res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
+                                                    sender.send(BufferedDomainTestResult {
+                                                        domain_test_results: res,
+                                                        timestamp: PreciseTime::now(),
+                                                        delivery_tag: message.delivery_tag,
+                                                    });
+                                                    //
+/*
+                                                    let mut iter = receiver_ack.try_iter();
+
+                                                    for x in iter {
+                                                        if re_cloned_args.debug {
+                                                            println!(" 🐇  👌  ACK for message id {:?}", x);
+                                                        }
+                                                        ch.basic_ack(x);
+                                                    }
+                                                    */
                                                     Ok(())
                                                 })
                                             })
@@ -313,7 +377,10 @@ fn main() {
 
             println!("{:#?}", rr);
         }
-        Cmd::Daemon { buffer_in_seconds, rabbitmq_url } => daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
+        Cmd::Daemon {
+            buffer_in_seconds,
+            rabbitmq_url,
+        } => daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
     }
 
 }
