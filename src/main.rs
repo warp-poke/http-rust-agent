@@ -175,8 +175,111 @@ fn run(domain_name: &str, args: Opt) -> ChecksResult {
 }
 
 // arg is a list of pairs (timestamp, result)
-fn warp10_post(data: &[(u64,ChecksResult)]) -> std::result::Result<(), Box<Error>> {
+fn warp10_post(data: &[(u64, ChecksResult)]) -> std::result::Result<(), Box<Error>> {
     unimplemented!()
+}
+
+
+fn daemonify(rabbitmq_url: String, cloned_args: Opt) {
+    println!(" 🐇  Connect to rabbitMQ server using 🐰:");
+
+
+    // create the reactor
+    let mut core = Core::new().unwrap();
+    let handle = core.handle();
+    let addr = rabbitmq_url.parse().unwrap();
+
+    let queue_name = format!("http-agent-{}", Uuid::new_v4());
+    let exchange_name = "checks.http";
+    let consumer_id = format!("http-rust-agent-{}", Uuid::new_v4());
+
+    core.run(
+        TcpStream::connect(&addr, &handle)
+            .and_then(|stream| {
+                println!(" 🐇  TCP..................................✅");
+
+                lapin::client::Client::connect(stream, &ConnectionOptions::default())
+            })
+            .and_then(|(client, heartbeat_future_fn)| {
+                println!(" 🐇  Rabbit Client........................✅");
+
+
+                let heartbeat_client = client.clone();
+                handle.spawn(heartbeat_future_fn(&heartbeat_client).map_err(|_| ()));
+
+                client.create_channel()
+            })
+            .and_then(|channel| {
+                let id = channel.id;
+                println!(" 🐇  Channel Created, id is {:.<13}.✅", id);
+
+
+                let ch = channel.clone();
+                let qdod = &QueueDeclareOptions::default();
+                let qdo = QueueDeclareOptions {
+                    ticket: qdod.ticket,
+                    passive: qdod.exclusive,
+                    durable: qdod.exclusive,
+                    exclusive: qdod.exclusive,
+                    auto_delete: true,
+                    nowait: qdod.nowait,
+                };
+                channel
+                    .queue_declare(queue_name.as_str(), &qdo, &FieldTable::new())
+                    .and_then(move |_| {
+                        println!(" 🐇  Channel {} declared queue {}", id, queue_name);
+
+                        channel
+                            .exchange_declare(
+                                exchange_name,
+                                "direct",
+                                &ExchangeDeclareOptions::default(),
+                                &FieldTable::new(),
+                            )
+                            .and_then(move |_| {
+                                println!(" 🐇  Exchange {} declared", exchange_name);
+                                channel
+                                    .queue_bind(
+                                        queue_name.as_str(),
+                                        exchange_name,
+                                        "",
+                                        &QueueBindOptions::default(),
+                                        &FieldTable::new(),
+                                    )
+                                    .and_then(move |_| {
+                                        println!(" 🐇  Queue {} bind to {}", queue_name, exchange_name);
+                                        channel
+                                            .basic_consume(
+                                                queue_name.as_str(),
+                                                consumer_id.as_str(),
+                                                &BasicConsumeOptions::default(),
+                                                &FieldTable::new(),
+                                            )
+                                            .and_then(|stream| {
+                                                println!(" 🐇  got consumer stream, ready.");
+                                                stream.for_each(move |message| {
+                                                    if cloned_args.debug {
+                                                        println!(" 🐇  got message: {:?}", message);
+                                                    }
+                                                    let deserialized: RequestBenchEvent = serde_json::from_slice(&message.data).unwrap();
+                                                    if cloned_args.verbose {
+                                                        println!(
+                                                            " 🐇  deserialized message get from rabbitmq: {:?}",
+                                                            deserialized
+                                                        );
+                                                    }
+                                                    let _res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
+                                                    ch.basic_ack(message.delivery_tag);
+                                                    Ok(())
+                                                })
+                                            })
+                                    })
+                            })
+                    })
+            }),
+    ).unwrap();
+
+
 }
 
 fn main() {
@@ -196,107 +299,7 @@ fn main() {
 
             println!("{:#?}", rr);
         }
-        Cmd::Daemon { rabbitmq_url } => {
-            println!(" 🐇  Connect to rabbitMQ server using 🐰:");
-
-
-            // create the reactor
-            let mut core = Core::new().unwrap();
-            let handle = core.handle();
-            let addr = rabbitmq_url.parse().unwrap();
-
-            let queue_name = format!("http-agent-{}", Uuid::new_v4());
-            let exchange_name = "checks.http";
-            let consumer_id = format!("http-rust-agent-{}", Uuid::new_v4());
-
-            core.run(
-                TcpStream::connect(&addr, &handle)
-                    .and_then(|stream| {
-                        println!(" 🐇  TCP..................................✅");
-
-                        lapin::client::Client::connect(stream, &ConnectionOptions::default())
-                    })
-                    .and_then(|(client, heartbeat_future_fn)| {
-                        println!(" 🐇  Rabbit Client........................✅");
-
-
-                        let heartbeat_client = client.clone();
-                        handle.spawn(heartbeat_future_fn(&heartbeat_client).map_err(|_| ()));
-
-                        client.create_channel()
-                    })
-                    .and_then(|channel| {
-                        let id = channel.id;
-                        println!(" 🐇  Channel Created, id is {:.<13}.✅", id);
-
-
-                        let ch = channel.clone();
-                        let qdod = &QueueDeclareOptions::default();
-                        let qdo = QueueDeclareOptions {
-                            ticket: qdod.ticket,
-                            passive: qdod.exclusive,
-                            durable: qdod.exclusive,
-                            exclusive: qdod.exclusive,
-                            auto_delete: true,
-                            nowait: qdod.nowait,
-                        };
-                        channel
-                            .queue_declare(queue_name.as_str(), &qdo, &FieldTable::new())
-                            .and_then(move |_| {
-                                println!(" 🐇  Channel {} declared queue {}", id, queue_name);
-
-                                channel
-                                    .exchange_declare(
-                                        exchange_name,
-                                        "direct",
-                                        &ExchangeDeclareOptions::default(),
-                                        &FieldTable::new(),
-                                    )
-                                    .and_then(move |_| {
-                                        println!(" 🐇  Exchange {} declared", exchange_name);
-                                        channel
-                                            .queue_bind(
-                                                queue_name.as_str(),
-                                                exchange_name,
-                                                "",
-                                                &QueueBindOptions::default(),
-                                                &FieldTable::new(),
-                                            )
-                                            .and_then(move |_| {
-                                                println!(" 🐇  Queue {} bind to {}", queue_name, exchange_name);
-                                                channel
-                                                    .basic_consume(
-                                                        queue_name.as_str(),
-                                                        consumer_id.as_str(),
-                                                        &BasicConsumeOptions::default(),
-                                                        &FieldTable::new(),
-                                                    )
-                                                    .and_then(|stream| {
-                                                        println!(" 🐇  got consumer stream, ready.");
-                                                        stream.for_each(move |message| {
-                                                            if cloned_args.debug {
-                                                                println!(" 🐇  got message: {:?}", message);
-                                                            }
-                                                            let deserialized:RequestBenchEvent=serde_json::from_slice(&message.data).unwrap();
-                                                            if cloned_args.verbose {
-                                                                println!(
-                                                                    " 🐇  deserialized message get from rabbitmq: {:?}",
-                                                                    deserialized
-                                                                );
-                                                            }
-                                                            let _res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
-                                                            ch.basic_ack(message.delivery_tag);
-                                                            Ok(())
-                                                        })
-                                                    })
-                                            })
-                                    })
-                            })
-                    }),
-            ).unwrap();
-
-
-        }
+        Cmd::Daemon { rabbitmq_url } => daemonify(rabbitmq_url, cloned_args),
     }
 
 }
