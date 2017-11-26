@@ -31,11 +31,7 @@ use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
 use time::{Duration, SteadyTime};
 use uuid::Uuid;
-
-
-
-
-
+use std::error::Error;
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -171,13 +167,17 @@ fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
     Ok(dtr)
 }
 
-fn run(domain_name: &str, args: Opt) -> Result<(Result<DomainTestResult>, Result<DomainTestResult>)> {
+type ChecksResult = Result<(Result<DomainTestResult>, Result<DomainTestResult>)>;
+fn run(domain_name: &str, args: Opt) -> ChecksResult {
     let http = run_check_for_url(format!("http://{}", domain_name).as_str(), &args);
     let https = run_check_for_url(format!("https://{}", domain_name).as_str(), &args);
 
     Ok((http, https))
 }
 
+fn warp10_post(data: &[(u64,ChecksResult)]) -> std::result::Result<(), Box<Error>> {
+    unimplemented!()
+}
 
 fn main() {
     let args = Opt::from_args();
