@@ -174,6 +174,7 @@ fn run(domain_name: &str, args: Opt) -> ChecksResult {
     Ok((http, https))
 }
 
+// arg is a list of pairs (timestamp, result)
 fn warp10_post(data: &[(u64,ChecksResult)]) -> std::result::Result<(), Box<Error>> {
     unimplemented!()
 }
