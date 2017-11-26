@@ -19,8 +19,7 @@ use futures::future::Future;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use lapin::client::ConnectionOptions;
-use lapin::channel::{BasicConsumeOptions,
-                     ExchangeDeclareOptions, QueueBindOptions,
+use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions,
                      QueueDeclareOptions};
 use lapin::types::FieldTable;
 
@@ -288,16 +287,17 @@ fn main() {
                                                         &FieldTable::new(),
                                                     )
                                                     .and_then(|stream| {
-                                                        println!(" 🐇  got consumer stream");
+                                                        println!(
+                                                            " 🐇  got consumer stream, ready."
+                                                        );
                                                         stream.for_each(move |message| {
-                                                            println!("got message: {:?}", message);
-                                                            println!(
-                                                                "decoded message: {:?}",
-                                                                std::str::from_utf8(&message.data)
-                                                                    .unwrap()
-                                                            );
-                                                            let deserialized: RequestBenchEvent = 
-                                    serde_json::from_slice(&message.data).unwrap();
+                                                            if args.debug {
+                                                                println!(" 🐇  got message: {:?}", message);
+                                                            }
+                                                            let deserialized:RequestBenchEvent=serde_json::from_slice(&message.data).unwrap();
+                                                                                            if args.verbose {
+                                                                println!(" 🐇  deserialized message get from rabbitmq: {:?}", deserialized);
+                                                            }
                                                             run_check_for_url(
                                                                 deserialized.url.as_str(),
                                                                 &cloned_args,
@@ -313,11 +313,7 @@ fn main() {
             ).unwrap();
 
 
-
-
-
         }
     }
 
 }
-
