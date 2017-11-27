@@ -299,26 +299,24 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                                                 let re_cloned_args = cloned_args.clone();
 
                                                 let shared_channel = Arc::new(Mutex::new(channel));
-                                                thread::spawn(move || {
-                                                    loop {
-                                                        thread::sleep(std::time::Duration::from_secs(1));
-                                                        let mut iter = receiver_ack.try_iter();
-                                                        let mut shared_channel = shared_channel.try_lock();
+                                                thread::spawn(move || loop {
+                                                    thread::sleep(std::time::Duration::from_secs(1));
+                                                    let mut iter = receiver_ack.try_iter();
+                                                    let mut shared_channel = shared_channel.try_lock();
 
-                                                        if let Ok(ref mut shared_channel) = shared_channel {
-                                                            for x in iter {
-                                                                if re_cloned_args.debug {
-                                                                    println!(" 🐇  👌  ACK for message id {:?}", x);
-                                                                }
-                                                                shared_channel.basic_ack(x);
+                                                    if let Ok(ref mut shared_channel) = shared_channel {
+                                                        for x in iter {
+                                                            if re_cloned_args.debug {
+                                                                println!(" 🐇  👌  ACK for message id {:?}", x);
                                                             }
-                                                        } else {
-                                                            println!("try_lock failed");
+                                                            shared_channel.basic_ack(x);
                                                         }
-
-
-
+                                                    } else {
+                                                        println!("try_lock failed");
                                                     }
+
+
+
                                                 });
 
 
