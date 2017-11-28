@@ -16,14 +16,10 @@ extern crate serde;
 extern crate serde_json;
 
 use futures::Future;
-use futures::Sink;
 use futures::Stream;
-use futures::future::Executor;
-use futures::stream;
 use futures::sync::mpsc;
 use futures::sync::mpsc::*;
 use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
-use lapin::channel::Channel;
 use lapin::client::ConnectionOptions;
 use lapin::types::FieldTable;
 use tokio_core::net::TcpStream;
@@ -36,12 +32,9 @@ use structopt::StructOpt;
 use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
 use std::error::Error;
-use std::io::{self, BufRead};
+use std::io::{self};
 use time::{Duration, PreciseTime, SteadyTime};
 use uuid::Uuid;
-
-use std::fmt;
-use std::sync::{Arc, Mutex};
 
 use std::thread;
 
@@ -157,8 +150,8 @@ struct BufferedDomainTestResult {
 
 #[derive(Debug)]
 enum MyStreamUnificationType {
-    Delivery_tag { delivery_tag: u64 },
-    Amqp_message { message: lapin_async::queue::Message, },
+    DeliveryTag { delivery_tag: u64 },
+    AmqpMessage { message: lapin_async::queue::Message, },
 }
 
 
@@ -237,12 +230,12 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
             if re_cloned_args.debug {
                 println!(" ⏰  loop tick every {}s", buffer_in_seconds);
             }
-            let mut iter = receiver.try_iter();
+            let iter = receiver.try_iter();
 
             for x in iter {
                 println!(" 📠  {:?}", x.domain_test_results);
                 // TODO warp10 send here
-                sender_ack.unbounded_send(Ok(MyStreamUnificationType::Delivery_tag {
+                sender_ack.unbounded_send(Ok(MyStreamUnificationType::DeliveryTag {
                     delivery_tag: x.delivery_tag,
                 }));
             }
@@ -269,7 +262,6 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                 println!(" 🐇  Channel Created, id is {:.<13}.✅", id);
 
 
-                let ch = channel.clone();
                 let qdod = &QueueDeclareOptions::default();
                 let qdo = QueueDeclareOptions {
                     ticket: qdod.ticket,
@@ -317,7 +309,7 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                                             .and_then(|stream| {
                                                 println!(" 🐇  got consumer stream, ready.");
                                                 let re_cloned_args = cloned_args.clone();
-                                                (stream.map(|x| Ok(MyStreamUnificationType::Amqp_message { message: x })))
+                                                (stream.map(|x| Ok(MyStreamUnificationType::AmqpMessage { message: x })))
                                                     .select(receiver_ack.map_err( // no error coming here, we get the stream
                                                         |_| io::Error::new(io::ErrorKind::Other, "boom"),
                                                     ))
@@ -326,13 +318,13 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                                                             println!(" 🍼  get on the stream: {:?}", item);
                                                         }
                                                         match item {
-                                                            Ok(MyStreamUnificationType::Delivery_tag { delivery_tag }) => {
+                                                            Ok(MyStreamUnificationType::DeliveryTag { delivery_tag }) => {
                                                                 if re_cloned_args.debug {
                                                                     println!(" 🐇  👌  ACK for message id {:?}", delivery_tag);
                                                                 }
                                                                 channel.basic_ack(delivery_tag);
                                                             }
-                                                            Ok(MyStreamUnificationType::Amqp_message { message }) => {
+                                                            Ok(MyStreamUnificationType::AmqpMessage { message }) => {
                                                                 if cloned_args.debug {
                                                                     println!(" 🐇  got message: {:?}", message);
                                                                 }
