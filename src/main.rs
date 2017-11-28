@@ -9,35 +9,45 @@ extern crate serde_derive;
 extern crate futures;
 extern crate tokio_core;
 extern crate lapin_futures as lapin;
+extern crate lapin_async;
 extern crate uuid;
 
 extern crate serde;
 extern crate serde_json;
 
+use futures::Future;
+use futures::Sink;
 use futures::Stream;
-use futures::future::Future;
-use tokio_core::reactor::Core;
-use tokio_core::net::TcpStream;
-use lapin::client::ConnectionOptions;
+use futures::future::Executor;
+use futures::stream;
+use futures::sync::mpsc;
+use futures::sync::mpsc::*;
 use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
-use lapin::types::FieldTable;
 use lapin::channel::Channel;
+use lapin::client::ConnectionOptions;
+use lapin::types::FieldTable;
+use tokio_core::net::TcpStream;
+use tokio_core::reactor::Core;
 
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::collections::HashMap;
 use structopt::StructOpt;
 
 use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
-use time::{Duration, SteadyTime, PreciseTime};
-use uuid::Uuid;
 use std::error::Error;
+use std::io::{self, BufRead};
+use time::{Duration, PreciseTime, SteadyTime};
+use uuid::Uuid;
 
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
+
+
+
+
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -62,8 +72,7 @@ enum Cmd {
 
     #[structopt(name = "daemon")]
     Daemon {
-        #[structopt(short = "s", long = "buffer_in_seconds", parse(try_from_str), default_value = "10",
-                    help = "Time in seconds, for buffer to send data in warp10")]
+        #[structopt(short = "s", long = "buffer_in_seconds", parse(try_from_str), default_value = "10", help = "Time in seconds, for buffer to send data in warp10")]
         buffer_in_seconds: u64,
         /// Needed parameter, the first on the command line.
         #[structopt(help = "url of the nats server")]
@@ -146,6 +155,11 @@ struct BufferedDomainTestResult {
     delivery_tag: u64,
 }
 
+#[derive(Debug)]
+enum MyStreamUnificationType {
+    Delivery_tag { delivery_tag: u64 },
+    Amqp_message { message: lapin_async::queue::Message, },
+}
 
 
 fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
@@ -201,33 +215,40 @@ fn warp10_post(data: &[(u64, ChecksResult)]) -> std::result::Result<(), Box<Erro
 fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
     println!(" 🐇  Connect to rabbitMQ server using 🐰:");
 
-    let (sender, receiver): (Sender<BufferedDomainTestResult>, Receiver<BufferedDomainTestResult>) = channel();
-    let (sender_ack, receiver_ack): (Sender<u64>, Receiver<u64>) = channel();
-
-    let re_cloned_args = cloned_args.clone();
-    thread::spawn(move || loop {
-        thread::sleep(std::time::Duration::from_secs(buffer_in_seconds));
-        if re_cloned_args.debug {
-            println!(" ⏰  loop tick every {}s", buffer_in_seconds);
-        }
-        let mut iter = receiver.try_iter();
-
-        for x in iter {
-            println!("{:?}", x.domain_test_results);
-            sender_ack.send(x.delivery_tag);
-        }
-    });
-
     // create the reactor
     let mut core = Core::new().unwrap();
     let handle = core.handle();
+
+
     let addr = rabbitmq_url.parse().unwrap();
 
     let queue_name = "http-agent-queue"; //format!("http-agent-{}", Uuid::new_v4());
     let exchange_name = "checks.http";
     let consumer_id = format!("http-rust-agent-{}", Uuid::new_v4());
 
-    core.run(
+    core.run({
+
+        let (sender, receiver): (std::sync::mpsc::Sender<BufferedDomainTestResult>, std::sync::mpsc::Receiver<BufferedDomainTestResult>) = std::sync::mpsc::channel();
+        let (sender_ack, receiver_ack): (UnboundedSender<Result<MyStreamUnificationType>>, UnboundedReceiver<Result<MyStreamUnificationType>>) = mpsc::unbounded();
+
+        let re_cloned_args = cloned_args.clone();
+        thread::spawn(move || loop {
+            thread::sleep(std::time::Duration::from_secs(buffer_in_seconds));
+            if re_cloned_args.debug {
+                println!(" ⏰  loop tick every {}s", buffer_in_seconds);
+            }
+            let mut iter = receiver.try_iter();
+
+            for x in iter {
+                println!(" 📠  {:?}", x.domain_test_results);
+                // TODO warp10 send here
+                sender_ack.unbounded_send(Ok(MyStreamUnificationType::Delivery_tag {
+                    delivery_tag: x.delivery_tag,
+                }));
+            }
+
+        });
+
         TcpStream::connect(&addr, &handle)
             .and_then(|stream| {
                 println!(" 🐇  TCP..................................✅");
@@ -295,68 +316,51 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                                             .basic_consume(queue_name, consumer_id.as_str(), &bco, &FieldTable::new())
                                             .and_then(|stream| {
                                                 println!(" 🐇  got consumer stream, ready.");
-
                                                 let re_cloned_args = cloned_args.clone();
-
-                                                let shared_channel = Arc::new(Mutex::new(channel));
-                                                thread::spawn(move || loop {
-                                                    thread::sleep(std::time::Duration::from_secs(1));
-                                                    let mut iter = receiver_ack.try_iter();
-                                                    let mut shared_channel = shared_channel.try_lock();
-
-                                                    if let Ok(ref mut shared_channel) = shared_channel {
-                                                        for x in iter {
-                                                            if re_cloned_args.debug {
-                                                                println!(" 🐇  👌  ACK for message id {:?}", x);
-                                                            }
-                                                            shared_channel.basic_ack(x);
-                                                        }
-                                                    } else {
-                                                        println!("try_lock failed");
-                                                    }
-
-
-
-                                                });
-
-
-
-                                                stream.for_each(move |message| {
-                                                    if cloned_args.debug {
-                                                        println!(" 🐇  got message: {:?}", message);
-                                                    }
-                                                    let deserialized: RequestBenchEvent = serde_json::from_slice(&message.data).unwrap();
-                                                    if cloned_args.verbose {
-                                                        println!(
-                                                            " 🐇  deserialized message get from rabbitmq: {:?}",
-                                                            deserialized
-                                                        );
-                                                    }
-                                                    let res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
-                                                    sender.send(BufferedDomainTestResult {
-                                                        domain_test_results: res,
-                                                        timestamp: PreciseTime::now(),
-                                                        delivery_tag: message.delivery_tag,
-                                                    });
-                                                    //
-/*
-                                                    let mut iter = receiver_ack.try_iter();
-
-                                                    for x in iter {
+                                                (stream.map(|x| Ok(MyStreamUnificationType::Amqp_message { message: x })))
+                                                    .select(receiver_ack.map_err( // no error coming here, we get the stream
+                                                        |_| io::Error::new(io::ErrorKind::Other, "boom"),
+                                                    ))
+                                                    .for_each(move |item| {
                                                         if re_cloned_args.debug {
-                                                            println!(" 🐇  👌  ACK for message id {:?}", x);
+                                                            println!(" 🍼  get on the stream: {:?}", item);
                                                         }
-                                                        ch.basic_ack(x);
-                                                    }
-                                                    */
-                                                    Ok(())
-                                                })
+                                                        match item {
+                                                            Ok(MyStreamUnificationType::Delivery_tag { delivery_tag }) => {
+                                                                if re_cloned_args.debug {
+                                                                    println!(" 🐇  👌  ACK for message id {:?}", delivery_tag);
+                                                                }
+                                                                channel.basic_ack(delivery_tag);
+                                                            }
+                                                            Ok(MyStreamUnificationType::Amqp_message { message }) => {
+                                                                if cloned_args.debug {
+                                                                    println!(" 🐇  got message: {:?}", message);
+                                                                }
+                                                                let deserialized: RequestBenchEvent = serde_json::from_slice(&message.data).unwrap();
+                                                                if cloned_args.verbose {
+                                                                    println!(
+                                                                        " 🐇  deserialized message get from rabbitmq: {:?}",
+                                                                        deserialized
+                                                                    );
+                                                                }
+                                                                let res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
+                                                                sender.send(BufferedDomainTestResult {
+                                                                    domain_test_results: res,
+                                                                    timestamp: PreciseTime::now(),
+                                                                    delivery_tag: message.delivery_tag,
+                                                                });
+                                                            }
+                                                            x => println!("   ❌ 🤔 Unknow type on the stream:   {:?}", x),
+                                                        }
+
+                                                        Ok(())
+                                                    })
                                             })
                                     })
                             })
                     })
-            }),
-    ).unwrap();
+            })
+    }).unwrap();
 
 }
 
