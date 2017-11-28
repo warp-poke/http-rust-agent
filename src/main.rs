@@ -36,6 +36,7 @@ use std::error::Error;
 use std::io::{self};
 use time::{Duration, PreciseTime, SteadyTime};
 use uuid::Uuid;
+use std::convert::From;
 
 use std::thread;
 
@@ -67,6 +68,10 @@ enum Cmd {
     Daemon {
         #[structopt(short = "s", long = "buffer_in_seconds", parse(try_from_str), default_value = "10", help = "Time in seconds, for buffer to send data in warp10")]
         buffer_in_seconds: u64,
+        #[structopt(short = "w10url", long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
+        warp10_url: String,
+        #[structopt(short = "w10tk", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
+        warp10_token: String,
         #[structopt(help = "url of the nats server")]
         // TODO manage clusterization
         rabbitmq_url: String,
@@ -120,6 +125,34 @@ struct DomainTestResult {
     content_length: u64,
 }
 
+impl From<BufferedDomainTestResult> for Vec<T=warp10::Data> {
+    fn from(item: BufferedDomainTestResult) -> Self {
+        vec![
+        warp10::Data::new(
+            item.timestamp,
+            None,
+            item.request_bench_event.status.class_name,
+            vec![
+                warp10::Label::new("label 1 name", "label 1 value"),
+                warp10::Label::new("label 2 name", "label 2 value")
+            ],
+            warp10::Value::int(item.http_status.as_u16)
+        ),
+        warp10::Data::new(
+            item.timestamp,
+            None,
+            item.request_bench_event.latency.class_name,
+            vec![
+                warp10::Label::new("label 1 name", "label 1 value"),
+                warp10::Label::new("label 2 name", "label 2 value")
+            ],
+            warp10::Value::Long(item.answer_time.num_milliseconds())
+        ),
+        ]
+    }
+}
+
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Checks {
     latency: CheckCreds,
@@ -145,6 +178,7 @@ struct BufferedDomainTestResult {
     domain_test_results: Result<DomainTestResult>,
     timestamp: time::PreciseTime,
     delivery_tag: u64,
+    request_bench_event: RequestBenchEvent,
 }
 
 #[derive(Debug)]
@@ -341,6 +375,7 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                                                                     domain_test_results: res,
                                                                     timestamp: PreciseTime::now(),
                                                                     delivery_tag: message.delivery_tag,
+                                                                    request_bench_event: deserialized
                                                                 });
                                                             }
                                                             x => println!("   ❌ 🤔 Unknow type on the stream:   {:?}", x),
