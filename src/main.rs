@@ -188,6 +188,8 @@ fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
         println!("{}  --- Duration: {}", animal, dur);
 
     }
+
+    // TODO, real error management and make it a real usable data
     Ok(dtr)
 }
 
