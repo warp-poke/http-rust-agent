@@ -11,6 +11,7 @@ extern crate tokio_core;
 extern crate lapin_futures as lapin;
 extern crate lapin_async;
 extern crate uuid;
+extern crate warp10;
 
 extern crate serde;
 extern crate serde_json;
@@ -58,7 +59,6 @@ struct Opt {
 enum Cmd {
     #[structopt(name = "once")]
     Once {
-        /// Needed parameter, the first on the command line.
         #[structopt(help = "domaine name")]
         domain_name: String,
     },
@@ -67,9 +67,8 @@ enum Cmd {
     Daemon {
         #[structopt(short = "s", long = "buffer_in_seconds", parse(try_from_str), default_value = "10", help = "Time in seconds, for buffer to send data in warp10")]
         buffer_in_seconds: u64,
-        /// Needed parameter, the first on the command line.
         #[structopt(help = "url of the nats server")]
-        // TODO manage NATS cluster (multiples url)
+        // TODO manage clusterization
         rabbitmq_url: String,
     },
 }
