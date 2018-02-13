@@ -2,6 +2,7 @@ use futures::Stream;
 use futures::Future;
 use futures_cpupool::Builder;
 use tokio_core::reactor::Core;
+use warp10;
 
 use rdkafka::Message;
 use rdkafka::consumer::Consumer;
@@ -13,15 +14,38 @@ use rdkafka::producer::FutureProducer;
 use std::thread;
 use std::time::Duration;
 
-fn expensive_computation(msg: OwnedMessage) -> String {
+use time;
+use serde_json;
+
+use check::run_check_for_url;
+use warp10_post;
+use BufferedDomainTestResult;
+use RequestBenchEvent;
+
+fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str) -> String {
     info!("Starting expensive computation on message");
     thread::sleep(Duration::from_millis(5000));
     info!("Expensive computation completed");
-    match msg.payload_view::<str>() {
-        Some(Ok(payload)) => format!("Payload len for {} is {}", payload, payload.len()),
-        Some(Err(_)) => "Error processing message payload".to_owned(),
-        None => "No payload".to_owned(),
+    if let Some(payload) = msg.payload() {
+      let request: RequestBenchEvent = serde_json::from_slice(payload).unwrap();
+
+      let check = run_check_for_url(&request.url, true);
+
+      let result = BufferedDomainTestResult {
+        domain_test_results: vec![check],
+        timestamp: time::now_utc().to_timespec(),
+        //FIXME: remove
+        delivery_tag: 42,
+        request_bench_event: request
+      };
+
+      let data: Vec<warp10::Data> = result.into();
+
+      let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
+      println!("{:#?}", res);
     }
+
+    String::new()
 }
 
 // Creates all the resources and runs the event loop. The event loop will:
@@ -32,12 +56,15 @@ fn expensive_computation(msg: OwnedMessage) -> String {
 // Moving each message from one stage of the pipeline to next one is handled by the event loop,
 // that runs on a single thread. The expensive CPU-bound computation is handled by the `CpuPool`,
 // without blocking the event loop.
-fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, output_topic: &str) {
+fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, output_topic: &str,  warp10_url: &str, warp10_token: &str) {
     // Create the event loop. The event loop will run on a single thread and drive the pipeline.
     let mut core = Core::new().unwrap();
 
     // Create the CPU pool, for CPU-intensive message processing.
     let cpu_pool = Builder::new().pool_size(4).create();
+
+    let url = warp10_url.to_string();
+    let token = warp10_token.to_string();
 
     // Create the `StreamConsumer`, to receive the messages from the topic in form of a `Stream`.
     let consumer = ClientConfig::new()
@@ -77,11 +104,14 @@ fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, output_
             let producer = producer.clone();
             let topic_name = output_topic.to_owned();
             let owned_message = msg.detach();
+
+            let u = url.clone();
+            let t = token.clone();
             // Create the inner pipeline, that represents the processing of a single event.
             let process_message = cpu_pool.spawn_fn(move || {
                 // Take ownership of the message, and runs an expensive computation on it,
                 // using one of the threads of the `cpu_pool`.
-                Ok(expensive_computation(owned_message))
+                Ok(expensive_computation(owned_message, &u, &t))
             }).and_then(move |computation_result| {
                 // Send the result of the computation to Kafka, asynchronously.
                 info!("Sending result");

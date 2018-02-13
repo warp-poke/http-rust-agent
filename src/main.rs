@@ -239,7 +239,7 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
     data
 }
 
-fn warp10_post(data: Vec<warp10::Data>, url: String, token: String) -> std::result::Result<warp10::Response, warp10::Error> {
+pub fn warp10_post(data: Vec<warp10::Data>, url: String, token: String) -> std::result::Result<warp10::Response, warp10::Error> {
     let client = warp10::Client::new(&url)?;
     let writer = client.get_writer(token);
     let res    = writer.post(data)?;
