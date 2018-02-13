@@ -128,28 +128,52 @@ struct DomainTestResult {
 
 impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
     fn from(item: BufferedDomainTestResult) -> Self {
-        vec![
-        warp10::Data::new(
-            item.timestamp,
-            None,
-            item.request_bench_event.status.class_name,
-            vec![
-                warp10::Label::new("label 1 name", "label 1 value"),
-                warp10::Label::new("label 2 name", "label 2 value")
-            ],
-            warp10::Value::int(item.http_status.as_u16)
-        ),
-        warp10::Data::new(
-            item.timestamp,
-            None,
-            item.request_bench_event.latency.class_name,
-            vec![
-                warp10::Label::new("label 1 name", "label 1 value"),
-                warp10::Label::new("label 2 name", "label 2 value")
-            ],
-            warp10::Value::Long(item.answer_time.num_milliseconds())
-        ),
-        ]
+        let mut res = Vec::new();
+
+        for result in item.domain_test_results.into_iter() {
+            if let Ok(dtr) = result {
+
+                let mut status_labels = item.request_bench_event.labels.clone();
+                item.request_bench_event.checks.status.labels.as_ref().map(|l| {
+                    for (ref k, ref v) in l.iter() {
+                        status_labels.insert(k.clone().to_string(), v.clone().to_string());
+                    }
+                });
+
+                let status_labels: Vec<warp10::Label> = status_labels.into_iter().map(|(k, v)| {
+                    warp10::Label::new(&k, &v)
+                }).collect();
+
+                res.push(warp10::Data::new(
+                    item.timestamp,
+                    None,
+                    item.request_bench_event.checks.status.class_name.clone(),
+                    status_labels,
+                    warp10::Value::Int(dtr.http_status.as_u16() as i32)
+                ));
+
+                let mut latency_labels = item.request_bench_event.labels.clone();
+                item.request_bench_event.checks.latency.labels.as_ref().map(|l| {
+                    for (ref k, ref v) in l.iter() {
+                        latency_labels.insert(k.clone().to_string(), v.clone().to_string());
+                    }
+                });
+
+                let latency_labels: Vec<warp10::Label> = latency_labels.iter().map(|(k, v)| {
+                    warp10::Label::new(&k, &v)
+                }).collect();
+
+                res.push(warp10::Data::new(
+                    item.timestamp,
+                    None,
+                    item.request_bench_event.checks.latency.class_name.clone(),
+                    latency_labels,
+                    warp10::Value::Int(dtr.answer_time.num_milliseconds() as i32)
+                ));
+            }
+        }
+
+        res
     }
 }
 
@@ -176,7 +200,7 @@ struct RequestBenchEvent {
 
 
 struct BufferedDomainTestResult {
-    domain_test_results: Result<DomainTestResult>,
+    domain_test_results: Vec<Result<DomainTestResult>>,
     timestamp: time::Timespec,
     delivery_tag: u64,
     request_bench_event: RequestBenchEvent,
@@ -373,7 +397,7 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                                                                 }
                                                                 let res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
                                                                 sender.send(BufferedDomainTestResult {
-                                                                    domain_test_results: res,
+                                                                    domain_test_results: vec![res],
                                                                     timestamp: time::now_utc().to_timespec(),
                                                                     delivery_tag: message.delivery_tag,
                                                                     request_bench_event: deserialized
