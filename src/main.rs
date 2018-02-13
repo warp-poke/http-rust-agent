@@ -41,6 +41,9 @@ use std::thread;
 use std::vec;
 
 mod kafka;
+mod check;
+
+use check::run_check_for_url;
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -120,7 +123,7 @@ pub const ANIMALS: &'static [&'static str] = &[
 ];
 
 #[derive(Debug)]
-struct DomainTestResult {
+pub struct DomainTestResult {
     url: String,
     http_status: reqwest::StatusCode,
     answer_time: Duration,
@@ -183,27 +186,27 @@ impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
 
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct Checks {
+pub struct Checks {
     latency: CheckCreds,
     status: CheckCreds,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct CheckCreds {
+pub struct CheckCreds {
     class_name: String,
     labels: Option<HashMap<String, String>>,
 }
 
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-struct RequestBenchEvent {
+pub struct RequestBenchEvent {
     labels: HashMap<String, String>,
     url: String,
     checks: Checks,
 }
 
 #[derive(Debug)]
-struct BufferedDomainTestResult {
+pub struct BufferedDomainTestResult {
     domain_test_results: Vec<Result<DomainTestResult>>,
     timestamp: time::Timespec,
     delivery_tag: u64,
@@ -211,47 +214,9 @@ struct BufferedDomainTestResult {
 }
 
 
-fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
-    let client = Client::new();
-    let start = SteadyTime::now();
-    let res = client.get(url).send()?;
-    let dur = SteadyTime::now() - start;
-
-    //  build infos
-    let dtr = DomainTestResult {
-        url: url.to_owned(),
-        http_status: res.status(),
-        answer_time: dur,
-        content_length: res.headers()
-            .get::<ContentLength>()
-            .cloned()
-            .map(|ct| match ct {
-                ContentLength(u) => u,
-            })
-            .unwrap_or(0u64),
-    };
-
-    if args.verbose {
-        let mut rng = thread_rng();
-        let animal = rng.choose(ANIMALS).unwrap();
-
-        println!("{}  - {} ------", animal, url);
-        println!("{}  --- Status: {}", animal, res.status());
-        println!("{}  --- Headers:", animal);
-        for h in res.headers().iter() {
-            println!("{}  ----- {}: {:?}", animal, h.name(), h.value_string());
-        }
-        println!("{}  --- Duration: {}", animal, dur);
-
-    }
-
-    // TODO, real error management and make it a real usable data
-    Ok(dtr)
-}
-
 fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
-    let http = run_check_for_url(format!("http://{}", domain_name).as_str(), &args);
-    let https = run_check_for_url(format!("https://{}", domain_name).as_str(), &args);
+    let http = run_check_for_url(format!("http://{}", domain_name).as_str(), args.verbose);
+    let https = run_check_for_url(format!("https://{}", domain_name).as_str(), args.verbose);
 
     let mut rbe = RequestBenchEvent::default();
     rbe.checks.latency.class_name = String::from("http-latency");
