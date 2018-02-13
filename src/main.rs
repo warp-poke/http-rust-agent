@@ -178,27 +178,27 @@ impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Checks {
     latency: CheckCreds,
     status: CheckCreds,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct CheckCreds {
     class_name: String,
     labels: Option<HashMap<String, String>>,
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct RequestBenchEvent {
     labels: HashMap<String, String>,
     url: String,
     checks: Checks,
 }
 
-
+#[derive(Debug)]
 struct BufferedDomainTestResult {
     domain_test_results: Vec<Result<DomainTestResult>>,
     timestamp: time::Timespec,
@@ -251,18 +251,31 @@ fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
     Ok(dtr)
 }
 
-type ChecksResult = Result<(Result<DomainTestResult>, Result<DomainTestResult>)>;
-fn run(domain_name: &str, args: Opt) -> ChecksResult {
+fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
     let http = run_check_for_url(format!("http://{}", domain_name).as_str(), &args);
     let https = run_check_for_url(format!("https://{}", domain_name).as_str(), &args);
 
-    Ok((http, https))
-}
+    let result = BufferedDomainTestResult {
+      domain_test_results: vec![http, https],
+      timestamp: time::now_utc().to_timespec(),
+      delivery_tag: 42,
+      request_bench_event: RequestBenchEvent::default()
+    };
 
+    println!("result:\n{:#?}", result);
+
+    let data: Vec<warp10::Data> = result.into();
+
+    println!("data:\n{:#?}", data);
+
+    data
+}
+/*
 // arg is a list of pairs (timestamp, result)
 fn warp10_post(data: &[(u64, ChecksResult)]) -> std::result::Result<(), Box<Error>> {
     unimplemented!()
 }
+*/
 
 
 fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
@@ -430,7 +443,7 @@ fn main() {
         Cmd::Once { domain_name } => {
             let rr = run(domain_name.as_str(), cloned_args);
 
-            println!("{:#?}", rr);
+            //println!("{:#?}", rr);
         }
         Cmd::Daemon {
             buffer_in_seconds,
