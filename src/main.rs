@@ -41,9 +41,6 @@ use std::convert::From;
 use std::thread;
 use std::vec;
 
-
-
-
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
 struct Opt {
@@ -62,6 +59,10 @@ enum Cmd {
     Once {
         #[structopt(help = "domaine name")]
         domain_name: String,
+        #[structopt(short = "u", long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
+        warp10_url: String,
+        #[structopt(short = "t", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
+        warp10_token: String,
     },
 
     #[structopt(name = "daemon")]
@@ -255,11 +256,16 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
     let http = run_check_for_url(format!("http://{}", domain_name).as_str(), &args);
     let https = run_check_for_url(format!("https://{}", domain_name).as_str(), &args);
 
+    let mut rbe = RequestBenchEvent::default();
+    rbe.checks.latency.class_name = String::from("http-latency");
+    rbe.checks.status.class_name = String::from("http-status");
+    rbe.labels.insert(String::from("domain"), domain_name.to_string());
+
     let result = BufferedDomainTestResult {
       domain_test_results: vec![http, https],
       timestamp: time::now_utc().to_timespec(),
       delivery_tag: 42,
-      request_bench_event: RequestBenchEvent::default()
+      request_bench_event: rbe
     };
 
     println!("result:\n{:#?}", result);
@@ -270,12 +276,13 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
 
     data
 }
-/*
-// arg is a list of pairs (timestamp, result)
-fn warp10_post(data: &[(u64, ChecksResult)]) -> std::result::Result<(), Box<Error>> {
-    unimplemented!()
+
+fn warp10_post(data: Vec<warp10::Data>, url: String, token: String) -> std::result::Result<warp10::Response, warp10::Error> {
+    let client = warp10::Client::new(&url)?;
+    let writer = client.get_writer(token);
+    let res    = writer.post(data)?;
+    Ok(res)
 }
-*/
 
 
 fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
@@ -440,10 +447,11 @@ fn main() {
     let cloned_args = args.clone();
 
     match args.cmd {
-        Cmd::Once { domain_name } => {
-            let rr = run(domain_name.as_str(), cloned_args);
+        Cmd::Once { domain_name, warp10_url, warp10_token } => {
+            let data = run(domain_name.as_str(), cloned_args);
 
-            //println!("{:#?}", rr);
+            let res = warp10_post(data, warp10_url, warp10_token);
+            println!("{:#?}", res);
         }
         Cmd::Daemon {
             buffer_in_seconds,
