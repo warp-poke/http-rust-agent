@@ -126,7 +126,7 @@ struct DomainTestResult {
 }
 
 
-impl<'a> From<BufferedDomainTestResult> for Vec<warp10::Data<'a>>  {
+impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
     fn from(item: BufferedDomainTestResult) -> Self {
         vec![
         warp10::Data::new(
