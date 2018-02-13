@@ -130,46 +130,48 @@ struct DomainTestResult {
 
 impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
     fn from(item: BufferedDomainTestResult) -> Self {
+      let mut status_labels = item.request_bench_event.labels.clone();
+      item.request_bench_event.checks.status.labels.as_ref().map(|l| {
+        for (ref k, ref v) in l.iter() {
+          status_labels.insert(k.clone().to_string(), v.clone().to_string());
+        }
+      });
+
+      let status_labels: Vec<warp10::Label> = status_labels.into_iter().map(|(k, v)| {
+        warp10::Label::new(&k, &v)
+      }).collect();
+
+      let mut latency_labels = item.request_bench_event.labels.clone();
+      item.request_bench_event.checks.latency.labels.as_ref().map(|l| {
+        for (ref k, ref v) in l.iter() {
+          latency_labels.insert(k.clone().to_string(), v.clone().to_string());
+        }
+      });
+
+      let latency_labels: Vec<warp10::Label> = latency_labels.iter().map(|(k, v)| {
+        warp10::Label::new(&k, &v)
+      }).collect();
+
+
         let mut res = Vec::new();
 
         for result in item.domain_test_results.into_iter() {
             if let Ok(dtr) = result {
 
-                let mut status_labels = item.request_bench_event.labels.clone();
-                item.request_bench_event.checks.status.labels.as_ref().map(|l| {
-                    for (ref k, ref v) in l.iter() {
-                        status_labels.insert(k.clone().to_string(), v.clone().to_string());
-                    }
-                });
-
-                let status_labels: Vec<warp10::Label> = status_labels.into_iter().map(|(k, v)| {
-                    warp10::Label::new(&k, &v)
-                }).collect();
 
                 res.push(warp10::Data::new(
                     item.timestamp,
                     None,
                     item.request_bench_event.checks.status.class_name.clone(),
-                    status_labels,
+                    status_labels.clone(),
                     warp10::Value::Int(dtr.http_status.as_u16() as i32)
                 ));
-
-                let mut latency_labels = item.request_bench_event.labels.clone();
-                item.request_bench_event.checks.latency.labels.as_ref().map(|l| {
-                    for (ref k, ref v) in l.iter() {
-                        latency_labels.insert(k.clone().to_string(), v.clone().to_string());
-                    }
-                });
-
-                let latency_labels: Vec<warp10::Label> = latency_labels.iter().map(|(k, v)| {
-                    warp10::Label::new(&k, &v)
-                }).collect();
 
                 res.push(warp10::Data::new(
                     item.timestamp,
                     None,
                     item.request_bench_event.checks.latency.class_name.clone(),
-                    latency_labels,
+                    latency_labels.clone(),
                     warp10::Value::Int(dtr.answer_time.num_milliseconds() as i32)
                 ));
             }
