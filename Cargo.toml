@@ -18,4 +18,4 @@ lapin-futures-rustls = "0.8.0"
 lapin-async = "^0.10"
 tokio-core = "^0.1"
 uuid = { version = "0.4", features = ["serde", "v4"] }
-warp10 = {git = "https://github.com/geal/warp10.rs" }#"0.9.0"
+warp10 = "0.10.0"
