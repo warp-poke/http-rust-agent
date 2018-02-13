@@ -68,9 +68,9 @@ enum Cmd {
     Daemon {
         #[structopt(short = "s", long = "buffer_in_seconds", parse(try_from_str), default_value = "10", help = "Time in seconds, for buffer to send data in warp10")]
         buffer_in_seconds: u64,
-        #[structopt(short = "w10url", long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
+        #[structopt(short = "u", long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
         warp10_url: String,
-        #[structopt(short = "w10tk", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
+        #[structopt(short = "t", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
         warp10_token: String,
         #[structopt(help = "url of the rabbit  server")]
         // TODO manage clusterization
