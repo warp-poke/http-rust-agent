@@ -125,7 +125,8 @@ struct DomainTestResult {
     content_length: u64,
 }
 
-impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
+
+impl<'a> From<BufferedDomainTestResult> for Vec<warp10::Data<'a>>  {
     fn from(item: BufferedDomainTestResult) -> Self {
         vec![
         warp10::Data::new(
@@ -176,7 +177,7 @@ struct RequestBenchEvent {
 
 struct BufferedDomainTestResult {
     domain_test_results: Result<DomainTestResult>,
-    timestamp: time::PreciseTime,
+    timestamp: time::Timespec,
     delivery_tag: u64,
     request_bench_event: RequestBenchEvent,
 }
@@ -373,7 +374,7 @@ fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
                                                                 let res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
                                                                 sender.send(BufferedDomainTestResult {
                                                                     domain_test_results: res,
-                                                                    timestamp: PreciseTime::now(),
+                                                                    timestamp: time::now_utc().to_timespec(),
                                                                     delivery_tag: message.delivery_tag,
                                                                     request_bench_event: deserialized
                                                                 });
@@ -410,6 +411,8 @@ fn main() {
         Cmd::Daemon {
             buffer_in_seconds,
             rabbitmq_url,
+            warp10_url, 
+            warp10_token
         } => daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
     }
 
