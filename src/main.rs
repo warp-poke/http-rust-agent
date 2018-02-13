@@ -6,10 +6,14 @@ extern crate time;
 extern crate rand;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate log;
 extern crate futures;
+extern crate futures_cpupool;
 extern crate tokio_core;
 extern crate uuid;
 extern crate warp10;
+extern crate rdkafka;
 
 extern crate serde;
 extern crate serde_json;
@@ -35,6 +39,8 @@ use std::convert::From;
 
 use std::thread;
 use std::vec;
+
+mod kafka;
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
