@@ -39,7 +39,7 @@ use uuid::Uuid;
 use std::convert::From;
 
 use std::thread;
-
+use std::vec;
 
 
 
@@ -72,7 +72,7 @@ enum Cmd {
         warp10_url: String,
         #[structopt(short = "w10tk", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
         warp10_token: String,
-        #[structopt(help = "url of the nats server")]
+        #[structopt(help = "url of the rabbit  server")]
         // TODO manage clusterization
         rabbitmq_url: String,
     },
@@ -125,7 +125,7 @@ struct DomainTestResult {
     content_length: u64,
 }
 
-impl From<BufferedDomainTestResult> for Vec<T=warp10::Data> {
+impl<T:warp10::Data> From<BufferedDomainTestResult> for Vec<T>  {
     fn from(item: BufferedDomainTestResult) -> Self {
         vec![
         warp10::Data::new(
