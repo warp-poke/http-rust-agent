@@ -8,8 +8,6 @@ extern crate rand;
 extern crate serde_derive;
 extern crate futures;
 extern crate tokio_core;
-extern crate lapin_futures as lapin;
-extern crate lapin_async;
 extern crate uuid;
 extern crate warp10;
 
@@ -20,9 +18,6 @@ use futures::Future;
 use futures::Stream;
 use futures::sync::mpsc;
 use futures::sync::mpsc::*;
-use lapin::channel::{BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
-use lapin::client::ConnectionOptions;
-use lapin::types::FieldTable;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Core;
 
@@ -207,12 +202,6 @@ struct BufferedDomainTestResult {
     request_bench_event: RequestBenchEvent,
 }
 
-#[derive(Debug)]
-enum MyStreamUnificationType {
-    DeliveryTag { delivery_tag: u64 },
-    AmqpMessage { message: lapin_async::queue::Message, },
-}
-
 
 fn run_check_for_url(url: &str, args: &Opt) -> Result<DomainTestResult> {
     let client = Client::new();
@@ -284,159 +273,6 @@ fn warp10_post(data: Vec<warp10::Data>, url: String, token: String) -> std::resu
     Ok(res)
 }
 
-
-fn daemonify(rabbitmq_url: String, buffer_in_seconds: u64, cloned_args: Opt) {
-    println!(" 🐇  Connect to rabbitMQ server using 🐰:");
-
-    // create the reactor
-    let mut core = Core::new().unwrap();
-    let handle = core.handle();
-
-
-    let addr = rabbitmq_url.parse().unwrap();
-
-    let queue_name = "http-agent-queue"; //format!("http-agent-{}", Uuid::new_v4());
-    let exchange_name = "checks.http";
-    let consumer_id = format!("http-rust-agent-{}", Uuid::new_v4());
-
-    core.run({
-
-        let (sender, receiver): (std::sync::mpsc::Sender<BufferedDomainTestResult>, std::sync::mpsc::Receiver<BufferedDomainTestResult>) = std::sync::mpsc::channel();
-        let (sender_ack, receiver_ack): (UnboundedSender<Result<MyStreamUnificationType>>, UnboundedReceiver<Result<MyStreamUnificationType>>) = mpsc::unbounded();
-
-        let re_cloned_args = cloned_args.clone();
-        thread::spawn(move || loop {
-            thread::sleep(std::time::Duration::from_secs(buffer_in_seconds));
-            if re_cloned_args.debug {
-                println!(" ⏰  loop tick every {}s", buffer_in_seconds);
-            }
-            let iter = receiver.try_iter();
-
-            for x in iter {
-                println!(" 📠  {:?}", x.domain_test_results);
-                // TODO warp10 send here
-                sender_ack.unbounded_send(Ok(MyStreamUnificationType::DeliveryTag {
-                    delivery_tag: x.delivery_tag,
-                }));
-            }
-
-        });
-
-        TcpStream::connect(&addr, &handle)
-            .and_then(|stream| {
-                println!(" 🐇  TCP..................................✅");
-
-                lapin::client::Client::connect(stream, &ConnectionOptions::default())
-            })
-            .and_then(|(client, heartbeat_future_fn)| {
-                println!(" 🐇  Rabbit Client........................✅");
-
-
-                let heartbeat_client = client.clone();
-                handle.spawn(heartbeat_future_fn(&heartbeat_client).map_err(|_| ()));
-
-                client.create_channel()
-            })
-            .and_then(|channel| {
-                let id = channel.id;
-                println!(" 🐇  Channel Created, id is {:.<13}.✅", id);
-
-
-                let qdod = &QueueDeclareOptions::default();
-                let qdo = QueueDeclareOptions {
-                    ticket: qdod.ticket,
-                    passive: qdod.exclusive,
-                    durable: qdod.exclusive,
-                    exclusive: qdod.exclusive,
-                    auto_delete: true,
-                    nowait: qdod.nowait,
-                };
-                channel
-                    .queue_declare(queue_name, &qdo, &FieldTable::new())
-                    .and_then(move |_| {
-                        println!(" 🐇  Channel {} declared queue {}", id, queue_name);
-
-                        channel
-                            .exchange_declare(
-                                exchange_name,
-                                "direct",
-                                &ExchangeDeclareOptions::default(),
-                                &FieldTable::new(),
-                            )
-                            .and_then(move |_| {
-                                println!(" 🐇  Exchange {} declared", exchange_name);
-                                channel
-                                    .queue_bind(
-                                        queue_name,
-                                        exchange_name,
-                                        "",
-                                        &QueueBindOptions::default(),
-                                        &FieldTable::new(),
-                                    )
-                                    .and_then(move |_| {
-                                        println!(" 🐇  Queue {} bind to {}", queue_name, exchange_name);
-
-                                        let bcod = &BasicConsumeOptions::default();
-                                        let bco = BasicConsumeOptions {
-                                            ticket: bcod.ticket,
-                                            no_local: bcod.no_local,
-                                            no_ack: false,
-                                            exclusive: bcod.exclusive,
-                                            no_wait: bcod.no_wait,
-                                        };
-                                        channel
-                                            .basic_consume(queue_name, consumer_id.as_str(), &bco, &FieldTable::new())
-                                            .and_then(|stream| {
-                                                println!(" 🐇  got consumer stream, ready.");
-                                                let re_cloned_args = cloned_args.clone();
-                                                (stream.map(|x| Ok(MyStreamUnificationType::AmqpMessage { message: x })))
-                                                    .select(receiver_ack.map_err( // no error coming here, we get the stream
-                                                        |_| io::Error::new(io::ErrorKind::Other, "boom"),
-                                                    ))
-                                                    .for_each(move |item| {
-                                                        if re_cloned_args.debug {
-                                                            println!(" 🍼  get on the stream: {:?}", item);
-                                                        }
-                                                        match item {
-                                                            Ok(MyStreamUnificationType::DeliveryTag { delivery_tag }) => {
-                                                                if re_cloned_args.debug {
-                                                                    println!(" 🐇  👌  ACK for message id {:?}", delivery_tag);
-                                                                }
-                                                                channel.basic_ack(delivery_tag);
-                                                            }
-                                                            Ok(MyStreamUnificationType::AmqpMessage { message }) => {
-                                                                if cloned_args.debug {
-                                                                    println!(" 🐇  got message: {:?}", message);
-                                                                }
-                                                                let deserialized: RequestBenchEvent = serde_json::from_slice(&message.data).unwrap();
-                                                                if cloned_args.verbose {
-                                                                    println!(
-                                                                        " 🐇  deserialized message get from rabbitmq: {:?}",
-                                                                        deserialized
-                                                                    );
-                                                                }
-                                                                let res = run_check_for_url(deserialized.url.as_str(), &cloned_args);
-                                                                sender.send(BufferedDomainTestResult {
-                                                                    domain_test_results: vec![res],
-                                                                    timestamp: time::now_utc().to_timespec(),
-                                                                    delivery_tag: message.delivery_tag,
-                                                                    request_bench_event: deserialized
-                                                                });
-                                                            }
-                                                            x => println!("   ❌ 🤔 Unknow type on the stream:   {:?}", x),
-                                                        }
-
-                                                        Ok(())
-                                                    })
-                                            })
-                                    })
-                            })
-                    })
-            })
-    }).unwrap();
-
-}
-
 fn main() {
     let args = Opt::from_args();
 
@@ -456,9 +292,9 @@ fn main() {
         Cmd::Daemon {
             buffer_in_seconds,
             rabbitmq_url,
-            warp10_url, 
+            warp10_url,
             warp10_token
-        } => daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
+        } => {},//daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
     }
 
 }
