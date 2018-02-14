@@ -215,7 +215,6 @@ pub struct RequestBenchEvent {
 pub struct BufferedDomainTestResult {
     domain_test_results: Vec<Result<DomainTestResult>>,
     timestamp: time::Timespec,
-    delivery_tag: u64,
     request_bench_event: RequestBenchEvent,
 }
 
@@ -235,7 +234,6 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
     let result = BufferedDomainTestResult {
         domain_test_results: vec![http, https],
         timestamp: time::now_utc().to_timespec(),
-        delivery_tag: 42,
         request_bench_event: rbe,
     };
 

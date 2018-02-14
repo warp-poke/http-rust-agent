@@ -39,8 +39,6 @@ fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str
         let result = BufferedDomainTestResult {
             domain_test_results: vec![check],
             timestamp: time::now_utc().to_timespec(),
-            //FIXME: remove
-            delivery_tag: 42,
             request_bench_event: request,
         };
 
