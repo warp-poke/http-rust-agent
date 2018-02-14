@@ -10,11 +10,7 @@ use rdkafka::Message;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::message::OwnedMessage;
 use rdkafka::producer::FutureProducer;
-
-use std::thread;
-use std::time::Duration;
 
 use serde_json;
 use time;
@@ -25,28 +21,31 @@ use check::run_check_for_url;
 use warp10_post;
 
 //FIXME: send back an error
-fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str) {
-    info!("Starting expensive computation on message");
-    thread::sleep(Duration::from_millis(5000));
-    info!("Expensive computation completed");
-    if let Some(payload) = msg.payload() {
-        let request: RequestBenchEvent = serde_json::from_slice(payload).unwrap();
-        println!("got request: {:#?}", request);
+fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str) -> Result<(), String> {
+    let r: serde_json::Result<RequestBenchEvent> = serde_json::from_slice(payload);
+    match r {
+        Ok(request) => {
+            println!("got request: {:#?}", request);
+            let check = run_check_for_url(&request.url, true);
 
+            let result = BufferedDomainTestResult {
+                domain_test_results: vec![check],
+                timestamp: time::now_utc().to_timespec(),
+                request_bench_event: request,
+            };
 
-        let check = run_check_for_url(&request.url, true);
+            let data: Vec<warp10::Data> = result.into();
+            println!("sending to warp10: {:?}", data);
 
-        let result = BufferedDomainTestResult {
-            domain_test_results: vec![check],
-            timestamp: time::now_utc().to_timespec(),
-            request_bench_event: request,
-        };
+            let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
+            println!("{:#?}", res);
+            match res {
+                Ok(_) => Ok(()),
+                Err(e) => Err(format!("{:?}", e)),
+            }
+        },
+        Err(e) => Err(format!("{:?}", e)),
 
-        let data: Vec<warp10::Data> = result.into();
-        println!("sending to warp10: {:?}", data);
-
-        let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
-        println!("{:#?}", res);
     }
 }
 
@@ -112,8 +111,12 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
                 .spawn(lazy(move || {
                     // Take ownership of the message, and runs an expensive computation on it,
                     // using one of the threads of the `cpu_pool`.
-                    expensive_computation(owned_message, &u, &t);
-                    Ok::<_, ()>(())
+                    if let Some(payload) = owned_message.payload() {
+                      check_and_post(payload, &u, &t)
+                    } else {
+                      Err(String::from("no payload"))
+                    }
+                    //Ok::<_, ()>(())
                 }))
                 .or_else(|err| {
                     // In case of error, this closure will be executed instead.
