@@ -11,6 +11,8 @@ pub struct Config {
     pub broker: String,
     pub topic: String,
     pub consumer_group: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 impl Config {
@@ -23,6 +25,9 @@ impl Config {
         let broker = env::var("BROKER").unwrap_or(cfg.as_ref().map(|c| c.broker.clone()).expect(err_msg));
         let topic = env::var("TOPIC").unwrap_or(cfg.as_ref().map(|c| c.topic.clone()).expect(err_msg));
         let consumer_group = env::var("CONSUMER_GROUP").unwrap_or(cfg.as_ref().map(|c| c.consumer_group.clone()).expect(err_msg));
+        let username = env::var("USERNAME").ok().or(cfg.as_ref().ok().and_then(|c| c.username.clone()));
+        let password: Option<String> = env::var("PASSWORD").ok().or(cfg.as_ref().ok().and_then(|c| c.password.clone()));
+
 
         Self {
             warp10_url,
@@ -30,6 +35,8 @@ impl Config {
             broker,
             topic,
             consumer_group,
+            username,
+            password,
         }
     }
 }

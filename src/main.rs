@@ -279,6 +279,8 @@ fn main() {
                 &cfg.topic,
                 &cfg.warp10_url,
                 &cfg.warp10_token,
+                cfg.username,
+                cfg.password
             )
         }
         Cmd::SendKafka {

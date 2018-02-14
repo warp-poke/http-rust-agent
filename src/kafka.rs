@@ -57,7 +57,7 @@ fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str) -> Resul
 // Moving each message from one stage of the pipeline to next one is handled by the event loop,
 // that runs on a single thread. The expensive CPU-bound computation is handled by the `CpuPool`,
 // without blocking the event loop.
-pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, warp10_url: &str, warp10_token: &str) {
+pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, warp10_url: &str, warp10_token: &str, username: Option<String>, password: Option<String>) {
     // Create the event loop. The event loop will run on a single thread and drive the pipeline.
     let mut core = Core::new().unwrap();
 
@@ -68,7 +68,17 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
     let token = warp10_token.to_string();
 
     // Create the `StreamConsumer`, to receive the messages from the topic in form of a `Stream`.
-    let consumer = ClientConfig::new()
+    let mut consumer = ClientConfig::new();
+
+    if let (Some(user), Some(pass)) = (username, password) {
+        consumer
+          .set("security.protocol", "SASL_SSL")
+          .set("sasl.mechanisms", "PLAIN")
+          .set("sasl.username", &user)
+          .set("sasl.password", &pass);
+    }
+
+    let consumer = consumer
         .set("group.id", group_id)
         .set("bootstrap.servers", brokers)
         .set("enable.partition.eof", "false")
