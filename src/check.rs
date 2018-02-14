@@ -3,7 +3,6 @@ use time::SteadyTime;
 use reqwest::{Client,Result};
 use reqwest::header::ContentLength;
 use rand::{Rng,thread_rng};
-use Opt;
 
 pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
     let client = Client::new();

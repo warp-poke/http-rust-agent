@@ -105,8 +105,6 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
             let t = token.clone();
             // Create the inner pipeline, that represents the processing of a single event.
             let process_message = cpu_pool.spawn(lazy(move || {
-                let url = u.clone();
-                let token = t.clone();
                 // Take ownership of the message, and runs an expensive computation on it,
                 // using one of the threads of the `cpu_pool`.
                 expensive_computation(owned_message, &u, &t);
@@ -128,9 +126,6 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
 }
 
 pub fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
-    // Create the event loop. The event loop will run on a single thread and drive the pipeline.
-    let mut core = Core::new().unwrap();
-
     info!("brokers: {}", brokers);
     // Create the CPU pool, for CPU-intensive message processing.
     //let cpu_pool = Builder::new().pool_size(4).create();
@@ -141,15 +136,7 @@ pub fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
         .create::<FutureProducer<_>>()
         .expect("Producer creation error");
 
-    let handle = core.handle();
     let topic_name = output_topic.to_string();
-    // Create the inner pipeline, that represents the processing of a single event.
-    /*let send = cpu_pool.spawn_fn(move || {
-      info!("Sending result");
-      let result = String::from("a");
-      let topic = topic_name.clone();
-      producer.send_copy::<String, ()>(&topic_name, None, Some(&result), None, None, 1000)
-    })*/
 
     let mut rbe = RequestBenchEvent::default();
     rbe.checks.latency.class_name = String::from("http-latency");
@@ -170,7 +157,5 @@ pub fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
       warn!("Error while processing message: {:?}", err);
       Ok::<_, ()>(())
     });
-    // Spawns the inner pipeline in the same event pool.
-    //handle.spawn(send);
 }
 

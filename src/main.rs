@@ -19,27 +19,13 @@ extern crate rdkafka;
 extern crate serde;
 extern crate serde_json;
 
-use futures::Future;
-use futures::Stream;
-use futures::sync::mpsc;
-use futures::sync::mpsc::*;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Core;
-
-use rand::{Rng, thread_rng};
 use std::collections::HashMap;
 use structopt::StructOpt;
 
-use reqwest::{Client, Result};
-use reqwest::header::ContentLength;
-use std::error::Error;
-use std::io::{self};
-use time::{Duration, PreciseTime, SteadyTime};
-use uuid::Uuid;
+use reqwest::Result;
+use time::Duration;
 use std::convert::From;
 
-use std::thread;
-use std::vec;
 
 mod kafka;
 mod check;
@@ -73,8 +59,6 @@ enum Cmd {
 
     #[structopt(name = "daemon")]
     Daemon {
-        #[structopt(short = "s", long = "buffer_in_seconds", parse(try_from_str), default_value = "10", help = "Time in seconds, for buffer to send data in warp10")]
-        buffer_in_seconds: u64,
         #[structopt(short = "u", long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
         warp10_url: String,
         #[structopt(short = "t", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
@@ -278,7 +262,6 @@ fn main() {
             println!("{:#?}", res);
         }
         Cmd::Daemon {
-            buffer_in_seconds,
             warp10_url,
             warp10_token,
             broker,
