@@ -92,7 +92,7 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
         .set("bootstrap.servers", brokers)
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", "6000")
-        .set("enable.auto.commit", "false")
+        .set("enable.auto.commit", "true")
         .create::<StreamConsumer<_>>()
         .expect("Consumer creation failed");
 
