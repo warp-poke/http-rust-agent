@@ -19,22 +19,31 @@ use BufferedDomainTestResult;
 use RequestBenchEvent;
 use check::run_check_for_url;
 use warp10_post;
+use warp10::Label;
+
+use std::collections::HashMap;
 
 //FIXME: send back an error
-fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str) -> Result<(), String> {
+fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str, host: &str, zone: &str) -> Result<(), String> {
     let r: serde_json::Result<RequestBenchEvent> = serde_json::from_slice(payload);
     match r {
         Ok(request) => {
             println!("got request: {:#?}", request);
             let check = run_check_for_url(&request.url, true);
+            let labels = vec![
+                Label::new("host", host),
+                Label::new("zone", zone),
+            ];
 
             let result = BufferedDomainTestResult {
                 domain_test_results: vec![check],
                 timestamp: time::now_utc().to_timespec(),
                 request_bench_event: request,
+                labels,
             };
 
-            let data: Vec<warp10::Data> = result.into();
+            let mut data: Vec<warp10::Data> = result.into();
+
             println!("sending to warp10: {:?}", data);
 
             let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
@@ -57,7 +66,7 @@ fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str) -> Resul
 // Moving each message from one stage of the pipeline to next one is handled by the event loop,
 // that runs on a single thread. The expensive CPU-bound computation is handled by the `CpuPool`,
 // without blocking the event loop.
-pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, warp10_url: &str, warp10_token: &str, username: Option<String>, password: Option<String>) {
+pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, warp10_url: &str, warp10_token: &str, username: Option<String>, password: Option<String>, host: String, zone: String) {
     // Create the event loop. The event loop will run on a single thread and drive the pipeline.
     let mut core = Core::new().unwrap();
 
@@ -116,13 +125,15 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
 
             let u = url.clone();
             let t = token.clone();
+            let h = host.clone();
+            let z = zone.clone();
             // Create the inner pipeline, that represents the processing of a single event.
             let process_message = cpu_pool
                 .spawn(lazy(move || {
                     // Take ownership of the message, and runs an expensive computation on it,
                     // using one of the threads of the `cpu_pool`.
                     if let Some(payload) = owned_message.payload() {
-                      check_and_post(payload, &u, &t)
+                      check_and_post(payload, &u, &t, &h, &z)
                     } else {
                       Err(String::from("no payload"))
                     }
@@ -166,8 +177,6 @@ pub fn send_message(brokers: &str, output_topic: &str, test_url: &str, username:
     let topic_name = output_topic.to_string();
 
     let mut rbe = RequestBenchEvent::default();
-    rbe.checks.latency.class_name = String::from("http-latency");
-    rbe.checks.status.class_name = String::from("http-status");
     //rbe.labels.insert(String::from("domain"), test_url.to_string());
     rbe.url = test_url.to_string();
     let result = serde_json::to_string(&rbe).unwrap();

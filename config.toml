@@ -3,3 +3,5 @@ warp10_token="MFQCX6vHa04miVThbYj.QhuD1ZwyfLXV_HuL23p_Z1KePIJ_BZoM6pZEAHjaXX6LzX
 broker="http://localhost:9092/"
 topic="test"
 consumer_group="test_consumer_group"
+host="1.http.gra.checker.poke.io"
+zone="eu-west"

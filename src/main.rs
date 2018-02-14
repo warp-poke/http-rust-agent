@@ -34,6 +34,7 @@ mod check;
 use config::Config;
 use check::run_check_for_url;
 use kafka::{run_async_processor, send_message};
+use warp10::Label;
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -130,55 +131,24 @@ pub struct DomainTestResult {
 
 impl From<BufferedDomainTestResult> for Vec<warp10::Data> {
     fn from(item: BufferedDomainTestResult) -> Self {
-        let mut status_labels = item.request_bench_event.labels.clone();
-        item.request_bench_event.checks.status.labels.as_ref().map(
-            |l| {
-                for (ref k, ref v) in l.iter() {
-                    status_labels.insert(k.clone().to_string(), v.clone().to_string());
-                }
-            },
-        );
-
-        let status_labels: Vec<warp10::Label> = status_labels
-            .into_iter()
-            .map(|(k, v)| warp10::Label::new(&k, &v))
-            .collect();
-
-        let mut latency_labels = item.request_bench_event.labels.clone();
-        item.request_bench_event
-            .checks
-            .latency
-            .labels
-            .as_ref()
-            .map(|l| for (ref k, ref v) in l.iter() {
-                latency_labels.insert(k.clone().to_string(), v.clone().to_string());
-            });
-
-        let latency_labels: Vec<warp10::Label> = latency_labels
-            .iter()
-            .map(|(k, v)| warp10::Label::new(&k, &v))
-            .collect();
-
-
         let mut res = Vec::new();
 
         for result in item.domain_test_results.into_iter() {
             if let Ok(dtr) = result {
 
-
                 res.push(warp10::Data::new(
                     item.timestamp,
                     None,
-                    item.request_bench_event.checks.status.class_name.clone(),
-                    status_labels.clone(),
+                    "http.response.status".to_string(),
+                    item.labels.clone(),
                     warp10::Value::Int(dtr.http_status.as_u16() as i32),
                 ));
 
                 res.push(warp10::Data::new(
                     item.timestamp,
                     None,
-                    item.request_bench_event.checks.latency.class_name.clone(),
-                    latency_labels.clone(),
+                    "http.response.time".to_string(),
+                    item.labels.clone(),
                     warp10::Value::Int(
                         dtr.answer_time.num_milliseconds() as i32,
                     ),
@@ -190,25 +160,12 @@ impl From<BufferedDomainTestResult> for Vec<warp10::Data> {
     }
 }
 
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct Checks {
-    latency: CheckCreds,
-    status: CheckCreds,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct CheckCreds {
-    class_name: String,
-    labels: Option<HashMap<String, String>>,
-}
-
-
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct RequestBenchEvent {
-    labels: HashMap<String, String>,
+    domain_name: String,
     url: String,
-    checks: Checks,
+    warp10_endpoint: String,
+    token: String,
 }
 
 #[derive(Debug)]
@@ -216,25 +173,20 @@ pub struct BufferedDomainTestResult {
     domain_test_results: Vec<Result<DomainTestResult>>,
     timestamp: time::Timespec,
     request_bench_event: RequestBenchEvent,
+    labels: Vec<Label>,
 }
-
 
 fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
     let http = run_check_for_url(format!("http://{}", domain_name).as_str(), args.verbose);
     let https = run_check_for_url(format!("https://{}", domain_name).as_str(), args.verbose);
 
     let mut rbe = RequestBenchEvent::default();
-    rbe.checks.latency.class_name = String::from("http-latency");
-    rbe.checks.status.class_name = String::from("http-status");
-    rbe.labels.insert(
-        String::from("domain"),
-        domain_name.to_string(),
-    );
 
     let result = BufferedDomainTestResult {
         domain_test_results: vec![http, https],
         timestamp: time::now_utc().to_timespec(),
         request_bench_event: rbe,
+        labels: Vec::with_capacity(3),
     };
 
     println!("result:\n{:#?}", result);
@@ -284,7 +236,9 @@ fn main() {
                 &cfg.warp10_url,
                 &cfg.warp10_token,
                 cfg.username,
-                cfg.password
+                cfg.password,
+                cfg.host,
+                cfg.zone,
             )
         }
         Cmd::SendKafka {

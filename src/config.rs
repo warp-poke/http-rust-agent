@@ -13,6 +13,8 @@ pub struct Config {
     pub consumer_group: String,
     pub username: Option<String>,
     pub password: Option<String>,
+    pub host: String,
+    pub zone: String,
 }
 
 impl Config {
@@ -27,7 +29,8 @@ impl Config {
         let consumer_group = env::var("CONSUMER_GROUP").unwrap_or(cfg.as_ref().map(|c| c.consumer_group.clone()).expect(err_msg));
         let username = env::var("USERNAME").ok().or(cfg.as_ref().ok().and_then(|c| c.username.clone()));
         let password: Option<String> = env::var("PASSWORD").ok().or(cfg.as_ref().ok().and_then(|c| c.password.clone()));
-
+        let host = env::var("HOST").unwrap_or(cfg.as_ref().map(|c| c.host.clone()).expect(err_msg));
+        let zone = env::var("ZONE").unwrap_or(cfg.as_ref().map(|c| c.zone.clone()).expect(err_msg));
 
         Self {
             warp10_url,
@@ -37,6 +40,8 @@ impl Config {
             consumer_group,
             username,
             password,
+            host,
+            zone,
         }
     }
 }
