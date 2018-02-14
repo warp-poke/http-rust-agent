@@ -1,8 +1,8 @@
-use super::{ANIMALS,DomainTestResult};
-use time::SteadyTime;
-use reqwest::{Client,Result};
+use super::{ANIMALS, DomainTestResult};
+use rand::{Rng, thread_rng};
+use reqwest::{Client, Result};
 use reqwest::header::ContentLength;
-use rand::{Rng,thread_rng};
+use time::SteadyTime;
 
 pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
     let client = Client::new();
@@ -41,4 +41,3 @@ pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
     // TODO, real error management and make it a real usable data
     Ok(dtr)
 }
-

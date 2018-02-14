@@ -23,15 +23,15 @@ use std::collections::HashMap;
 use structopt::StructOpt;
 
 use reqwest::Result;
-use time::Duration;
 use std::convert::From;
+use time::Duration;
 
 
 mod kafka;
 mod check;
 
 use check::run_check_for_url;
-use kafka::{send_message, run_async_processor};
+use kafka::{run_async_processor, send_message};
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -128,29 +128,36 @@ pub struct DomainTestResult {
 }
 
 
-impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
+impl From<BufferedDomainTestResult> for Vec<warp10::Data> {
     fn from(item: BufferedDomainTestResult) -> Self {
-      let mut status_labels = item.request_bench_event.labels.clone();
-      item.request_bench_event.checks.status.labels.as_ref().map(|l| {
-        for (ref k, ref v) in l.iter() {
-          status_labels.insert(k.clone().to_string(), v.clone().to_string());
-        }
-      });
+        let mut status_labels = item.request_bench_event.labels.clone();
+        item.request_bench_event.checks.status.labels.as_ref().map(
+            |l| {
+                for (ref k, ref v) in l.iter() {
+                    status_labels.insert(k.clone().to_string(), v.clone().to_string());
+                }
+            },
+        );
 
-      let status_labels: Vec<warp10::Label> = status_labels.into_iter().map(|(k, v)| {
-        warp10::Label::new(&k, &v)
-      }).collect();
+        let status_labels: Vec<warp10::Label> = status_labels
+            .into_iter()
+            .map(|(k, v)| warp10::Label::new(&k, &v))
+            .collect();
 
-      let mut latency_labels = item.request_bench_event.labels.clone();
-      item.request_bench_event.checks.latency.labels.as_ref().map(|l| {
-        for (ref k, ref v) in l.iter() {
-          latency_labels.insert(k.clone().to_string(), v.clone().to_string());
-        }
-      });
+        let mut latency_labels = item.request_bench_event.labels.clone();
+        item.request_bench_event
+            .checks
+            .latency
+            .labels
+            .as_ref()
+            .map(|l| for (ref k, ref v) in l.iter() {
+                latency_labels.insert(k.clone().to_string(), v.clone().to_string());
+            });
 
-      let latency_labels: Vec<warp10::Label> = latency_labels.iter().map(|(k, v)| {
-        warp10::Label::new(&k, &v)
-      }).collect();
+        let latency_labels: Vec<warp10::Label> = latency_labels
+            .iter()
+            .map(|(k, v)| warp10::Label::new(&k, &v))
+            .collect();
 
 
         let mut res = Vec::new();
@@ -164,7 +171,7 @@ impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
                     None,
                     item.request_bench_event.checks.status.class_name.clone(),
                     status_labels.clone(),
-                    warp10::Value::Int(dtr.http_status.as_u16() as i32)
+                    warp10::Value::Int(dtr.http_status.as_u16() as i32),
                 ));
 
                 res.push(warp10::Data::new(
@@ -172,7 +179,9 @@ impl From<BufferedDomainTestResult> for Vec<warp10::Data>  {
                     None,
                     item.request_bench_event.checks.latency.class_name.clone(),
                     latency_labels.clone(),
-                    warp10::Value::Int(dtr.answer_time.num_milliseconds() as i32)
+                    warp10::Value::Int(
+                        dtr.answer_time.num_milliseconds() as i32,
+                    ),
                 ));
             }
         }
@@ -218,13 +227,16 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
     let mut rbe = RequestBenchEvent::default();
     rbe.checks.latency.class_name = String::from("http-latency");
     rbe.checks.status.class_name = String::from("http-status");
-    rbe.labels.insert(String::from("domain"), domain_name.to_string());
+    rbe.labels.insert(
+        String::from("domain"),
+        domain_name.to_string(),
+    );
 
     let result = BufferedDomainTestResult {
-      domain_test_results: vec![http, https],
-      timestamp: time::now_utc().to_timespec(),
-      delivery_tag: 42,
-      request_bench_event: rbe
+        domain_test_results: vec![http, https],
+        timestamp: time::now_utc().to_timespec(),
+        delivery_tag: 42,
+        request_bench_event: rbe,
     };
 
     println!("result:\n{:#?}", result);
@@ -239,7 +251,7 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
 pub fn warp10_post(data: Vec<warp10::Data>, url: String, token: String) -> std::result::Result<warp10::Response, warp10::Error> {
     let client = warp10::Client::new(&url)?;
     let writer = client.get_writer(token);
-    let res    = writer.post(data)?;
+    let res = writer.post(data)?;
     Ok(res)
 }
 
@@ -254,7 +266,11 @@ fn main() {
     let cloned_args = args.clone();
 
     match args.cmd {
-        Cmd::Once { domain_name, warp10_url, warp10_token } => {
+        Cmd::Once {
+            domain_name,
+            warp10_url,
+            warp10_token,
+        } => {
             //send_message(&broker, &topic, &domain_name);
             let data = run(domain_name.as_str(), cloned_args);
 
@@ -265,17 +281,23 @@ fn main() {
             warp10_url,
             warp10_token,
             broker,
-            topic
+            topic,
         } => {
-          run_async_processor(&broker, "test-consumer-group", &topic, &warp10_url, &warp10_token)
-        },
+            run_async_processor(
+                &broker,
+                "test-consumer-group",
+                &topic,
+                &warp10_url,
+                &warp10_token,
+            )
+        }
         Cmd::SendKafka {
             domain_name,
             broker,
             topic,
         } => {
             send_message(&broker, &topic, &domain_name);
-        },
+        }
     }
 
 }

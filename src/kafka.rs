@@ -1,5 +1,5 @@
-use futures::Stream;
 use futures::Future;
+use futures::Stream;
 use futures::future::lazy;
 
 use futures_cpupool::Builder;
@@ -7,22 +7,22 @@ use tokio_core::reactor::Core;
 use warp10;
 
 use rdkafka::Message;
+use rdkafka::config::ClientConfig;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::config::ClientConfig;
 use rdkafka::message::OwnedMessage;
 use rdkafka::producer::FutureProducer;
 
 use std::thread;
 use std::time::Duration;
 
-use time;
 use serde_json;
+use time;
 
-use check::run_check_for_url;
-use warp10_post;
 use BufferedDomainTestResult;
 use RequestBenchEvent;
+use check::run_check_for_url;
+use warp10_post;
 
 //FIXME: send back an error
 fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str) {
@@ -30,25 +30,25 @@ fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str
     thread::sleep(Duration::from_millis(5000));
     info!("Expensive computation completed");
     if let Some(payload) = msg.payload() {
-      let request: RequestBenchEvent = serde_json::from_slice(payload).unwrap();
-      println!("got request: {:#?}", request);
+        let request: RequestBenchEvent = serde_json::from_slice(payload).unwrap();
+        println!("got request: {:#?}", request);
 
 
-      let check = run_check_for_url(&request.url, true);
+        let check = run_check_for_url(&request.url, true);
 
-      let result = BufferedDomainTestResult {
-        domain_test_results: vec![check],
-        timestamp: time::now_utc().to_timespec(),
-        //FIXME: remove
-        delivery_tag: 42,
-        request_bench_event: request
-      };
+        let result = BufferedDomainTestResult {
+            domain_test_results: vec![check],
+            timestamp: time::now_utc().to_timespec(),
+            //FIXME: remove
+            delivery_tag: 42,
+            request_bench_event: request,
+        };
 
-      let data: Vec<warp10::Data> = result.into();
-      println!("sending to warp10: {:?}", data);
+        let data: Vec<warp10::Data> = result.into();
+        println!("sending to warp10: {:?}", data);
 
-      let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
-      println!("{:#?}", res);
+        let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
+        println!("{:#?}", res);
     }
 }
 
@@ -80,7 +80,9 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
         .create::<StreamConsumer<_>>()
         .expect("Consumer creation failed");
 
-    consumer.subscribe(&[input_topic]).expect("Can't subscribe to specified topic");
+    consumer.subscribe(&[input_topic]).expect(
+        "Can't subscribe to specified topic",
+    );
 
 
     // Create a handle to the core, that will be used to provide additional asynchronous work
@@ -88,8 +90,10 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
     let handle = core.handle();
 
     // Create the outer pipeline on the message stream.
-    let processed_stream = consumer.start()
-        .filter_map(|result| {  // Filter out errors
+    let processed_stream = consumer
+        .start()
+        .filter_map(|result| {
+            // Filter out errors
             match result {
                 Ok(msg) => Some(msg),
                 Err(kafka_error) => {
@@ -97,23 +101,27 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
                     None
                 }
             }
-        }).for_each(move |msg| {     // Process each message
+        })
+        .for_each(move |msg| {
+            // Process each message
             info!("Enqueuing message for computation");
             let owned_message = msg.detach();
 
             let u = url.clone();
             let t = token.clone();
             // Create the inner pipeline, that represents the processing of a single event.
-            let process_message = cpu_pool.spawn(lazy(move || {
-                // Take ownership of the message, and runs an expensive computation on it,
-                // using one of the threads of the `cpu_pool`.
-                expensive_computation(owned_message, &u, &t);
-                Ok::<_, ()>(())
-            })).or_else(|err| {
-                // In case of error, this closure will be executed instead.
-                warn!("Error while processing message: {:?}", err);
-                Ok(())
-            });
+            let process_message = cpu_pool
+                .spawn(lazy(move || {
+                    // Take ownership of the message, and runs an expensive computation on it,
+                    // using one of the threads of the `cpu_pool`.
+                    expensive_computation(owned_message, &u, &t);
+                    Ok::<_, ()>(())
+                }))
+                .or_else(|err| {
+                    // In case of error, this closure will be executed instead.
+                    warn!("Error while processing message: {:?}", err);
+                    Ok(())
+                });
             // Spawns the inner pipeline in the same event pool.
             handle.spawn(process_message);
             Ok(())
@@ -146,16 +154,17 @@ pub fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
     let result = serde_json::to_string(&rbe).unwrap();
     info!("sending\n{}", result);
 
-    producer.send_copy::<String, ()>(&topic_name, None, Some(&result), None, None, 1000)
-    .and_then(|d_report| {
-      // Once the message has been produced, print the delivery report and terminate
-      // the pipeline.
-      info!("Delivery report for result: {:?}", d_report);
-      Ok(())
-    }).or_else(|err| {
-      // In case of error, this closure will be executed instead.
-      warn!("Error while processing message: {:?}", err);
-      Ok::<_, ()>(())
-    });
+    producer
+        .send_copy::<String, ()>(&topic_name, None, Some(&result), None, None, 1000)
+        .and_then(|d_report| {
+            // Once the message has been produced, print the delivery report and terminate
+            // the pipeline.
+            info!("Delivery report for result: {:?}", d_report);
+            Ok(())
+        })
+        .or_else(|err| {
+            // In case of error, this closure will be executed instead.
+            warn!("Error while processing message: {:?}", err);
+            Ok::<_, ()>(())
+        });
 }
-
