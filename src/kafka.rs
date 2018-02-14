@@ -31,6 +31,8 @@ fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str
     info!("Expensive computation completed");
     if let Some(payload) = msg.payload() {
       let request: RequestBenchEvent = serde_json::from_slice(payload).unwrap();
+      println!("got request: {:#?}", request);
+
 
       let check = run_check_for_url(&request.url, true);
 
@@ -43,6 +45,7 @@ fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str
       };
 
       let data: Vec<warp10::Data> = result.into();
+      println!("sending to warp10: {:?}", data);
 
       let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
       println!("{:#?}", res);
@@ -57,7 +60,7 @@ fn expensive_computation(msg: OwnedMessage, warp10_url: &str, warp10_token: &str
 // Moving each message from one stage of the pipeline to next one is handled by the event loop,
 // that runs on a single thread. The expensive CPU-bound computation is handled by the `CpuPool`,
 // without blocking the event loop.
-fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, output_topic: &str,  warp10_url: &str, warp10_token: &str) {
+pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, warp10_url: &str, warp10_token: &str) {
     // Create the event loop. The event loop will run on a single thread and drive the pipeline.
     let mut core = Core::new().unwrap();
 
@@ -124,10 +127,11 @@ fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, output_
     info!("Stream processing terminated");
 }
 
-fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
+pub fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
     // Create the event loop. The event loop will run on a single thread and drive the pipeline.
     let mut core = Core::new().unwrap();
 
+    info!("brokers: {}", brokers);
     // Create the CPU pool, for CPU-intensive message processing.
     //let cpu_pool = Builder::new().pool_size(4).create();
     // Create the `FutureProducer` to produce asynchronously.
@@ -146,7 +150,15 @@ fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
       let topic = topic_name.clone();
       producer.send_copy::<String, ()>(&topic_name, None, Some(&result), None, None, 1000)
     })*/
-    let result = String::from("a");
+
+    let mut rbe = RequestBenchEvent::default();
+    rbe.checks.latency.class_name = String::from("http-latency");
+    rbe.checks.status.class_name = String::from("http-status");
+    //rbe.labels.insert(String::from("domain"), test_url.to_string());
+    rbe.url = test_url.to_string();
+    let result = serde_json::to_string(&rbe).unwrap();
+    info!("sending\n{}", result);
+
     producer.send_copy::<String, ()>(&topic_name, None, Some(&result), None, None, 1000)
     .and_then(|d_report| {
       // Once the message has been produced, print the delivery report and terminate

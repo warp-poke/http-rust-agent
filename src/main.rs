@@ -45,7 +45,7 @@ mod kafka;
 mod check;
 
 use check::run_check_for_url;
-use kafka:: {send_message};
+use kafka::{send_message, run_async_processor};
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -79,9 +79,10 @@ enum Cmd {
         warp10_url: String,
         #[structopt(short = "t", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
         warp10_token: String,
-        #[structopt(help = "url of the rabbit  server")]
-        // TODO manage clusterization
-        rabbitmq_url: String,
+        #[structopt(short = "b", long = "broker", default_value = "localhost:9092", help = "Url of a kafka broker")]
+        broker: String,
+        #[structopt(short = "o", long = "topic", default_value = "test", help = "Topic kafka to read")]
+        topic: String,
     },
 
     #[structopt(name = "send-kafka")]
@@ -278,10 +279,13 @@ fn main() {
         }
         Cmd::Daemon {
             buffer_in_seconds,
-            rabbitmq_url,
             warp10_url,
-            warp10_token
-        } => {},//daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
+            warp10_token,
+            broker,
+            topic
+        } => {
+          run_async_processor(&broker, "test-consumer-group", &topic, &warp10_url, &warp10_token)
+        },
         Cmd::SendKafka {
             domain_name,
             broker,
