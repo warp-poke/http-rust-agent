@@ -87,13 +87,9 @@ enum Cmd {
     SendKafka {
         #[structopt(help = "domaine name")]
         domain_name: String,
-        #[structopt(short = "u", long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
-        warp10_url: String,
-        #[structopt(short = "t", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
-        warp10_token: String,
-        #[structopt(short = "b", long = "broker", default_value = "http://localhost:9092/", help = "Url of a kafka broker")]
+        #[structopt(short = "b", long = "broker", default_value = "localhost:9092", help = "Url of a kafka broker")]
         broker: String,
-        #[structopt(short = "to", long = "topic", default_value = "test", help = "Topic kafka to read")]
+        #[structopt(short = "o", long = "topic", default_value = "test", help = "Topic kafka to read")]
         topic: String,
     },
 }
@@ -286,11 +282,11 @@ fn main() {
         } => {},//daemonify(rabbitmq_url, buffer_in_seconds, cloned_args),
         Cmd::SendKafka {
             domain_name,
-            warp10_url,
-            warp10_token,
             broker,
             topic,
-        } => {},
+        } => {
+            send_message(&broker, &topic, &domain_name);
+        },
     }
 
 }
