@@ -144,12 +144,20 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
     info!("Stream processing terminated");
 }
 
-pub fn send_message(brokers: &str, output_topic: &str, test_url: &str) {
-    info!("brokers: {}", brokers);
-    // Create the CPU pool, for CPU-intensive message processing.
-    //let cpu_pool = Builder::new().pool_size(4).create();
-    // Create the `FutureProducer` to produce asynchronously.
-    let producer = ClientConfig::new()
+pub fn send_message(brokers: &str, output_topic: &str, test_url: &str, username: Option<String>, password: Option<String>) {
+    println!("brokers: {}", brokers);
+
+    let mut producer = ClientConfig::new();
+
+    if let (Some(user), Some(pass)) = (username, password) {
+        producer
+          .set("security.protocol", "SASL_SSL")
+          .set("sasl.mechanisms", "PLAIN")
+          .set("sasl.username", &user)
+          .set("sasl.password", &pass);
+    }
+
+    let producer = producer
         .set("bootstrap.servers", brokers)
         .set("produce.offset.report", "true")
         .create::<FutureProducer<_>>()

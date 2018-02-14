@@ -71,8 +71,12 @@ enum Cmd {
         domain_name: String,
         #[structopt(short = "b", long = "broker", default_value = "localhost:9092", help = "Url of a kafka broker")]
         broker: String,
-        #[structopt(short = "o", long = "topic", default_value = "test", help = "Topic kafka to read")]
+        #[structopt(short = "t", long = "topic", default_value = "test", help = "Topic kafka to read")]
         topic: String,
+        #[structopt(short = "u", long = "sasl-user", help = "SASL username")]
+        username: Option<String>,
+        #[structopt(short = "p", long = "sasl-password", help = "SASL password")]
+        password: Option<String>,
     },
 }
 
@@ -287,8 +291,10 @@ fn main() {
             domain_name,
             broker,
             topic,
+            username,
+            password
         } => {
-            send_message(&broker, &topic, &domain_name);
+            send_message(&broker, &topic, &domain_name, username, password);
         }
     }
 
