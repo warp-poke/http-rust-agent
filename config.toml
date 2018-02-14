@@ -1,5 +1,3 @@
-warp10_url="http://localhost:8080/"
-warp10_token="MFQCX6vHa04miVThbYj.QhuD1ZwyfLXV_HuL23p_Z1KePIJ_BZoM6pZEAHjaXX6LzXr4D29k3zMW3hV1n.fP7qYjOkHwkL8IPOWeXx_bHjoo2veO7KSmFe7YJ4t43lC0"
 broker="http://localhost:9092/"
 topic="test"
 consumer_group="test_consumer_group"
