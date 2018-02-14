@@ -23,7 +23,7 @@ addons:
       - libdw-dev
       - binutils-dev
       - cmake
-      - librdkafka
+      - librdkafka-dev
     sources:
       - kalakris-cmake
 
