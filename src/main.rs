@@ -8,6 +8,7 @@ extern crate rand;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
+extern crate env_logger;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate tokio_core;
@@ -258,6 +259,7 @@ pub fn warp10_post(data: Vec<warp10::Data>, url: String, token: String) -> std::
 }
 
 fn main() {
+    env_logger::init();
     let args = Opt::from_args();
 
     if args.debug {
