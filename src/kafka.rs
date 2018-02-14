@@ -185,5 +185,5 @@ pub fn send_message(brokers: &str, output_topic: &str, test_url: &str, username:
             // In case of error, this closure will be executed instead.
             warn!("Error while processing message: {:?}", err);
             Ok::<_, ()>(())
-        });
+        }).wait().unwrap();
 }
