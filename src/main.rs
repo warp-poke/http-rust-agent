@@ -18,6 +18,7 @@ extern crate rdkafka;
 
 extern crate serde;
 extern crate serde_json;
+extern crate toml;
 
 use std::collections::HashMap;
 use structopt::StructOpt;
@@ -26,10 +27,11 @@ use reqwest::Result;
 use std::convert::From;
 use time::Duration;
 
-
+mod config;
 mod kafka;
 mod check;
 
+use config::Config;
 use check::run_check_for_url;
 use kafka::{run_async_processor, send_message};
 
@@ -59,14 +61,8 @@ enum Cmd {
 
     #[structopt(name = "daemon")]
     Daemon {
-        #[structopt(short = "u", long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
-        warp10_url: String,
-        #[structopt(short = "t", long = "warp10-token", help = "Token to write in the Warp10 datastore")]
-        warp10_token: String,
-        #[structopt(short = "b", long = "broker", default_value = "localhost:9092", help = "Url of a kafka broker")]
-        broker: String,
-        #[structopt(short = "o", long = "topic", default_value = "test", help = "Topic kafka to read")]
-        topic: String,
+        #[structopt(short = "c", long = "path-config", default_value = "./config.toml", help = "Path to the config file")]
+        path_config_file: String,
     },
 
     #[structopt(name = "send-kafka")]
@@ -275,18 +271,14 @@ fn main() {
             let res = warp10_post(data, warp10_url, warp10_token);
             println!("{:#?}", res);
         }
-        Cmd::Daemon {
-            warp10_url,
-            warp10_token,
-            broker,
-            topic,
-        } => {
+        Cmd::Daemon { path_config_file } => {
+            let cfg = Config::new(&path_config_file);
             run_async_processor(
-                &broker,
-                "test-consumer-group",
-                &topic,
-                &warp10_url,
-                &warp10_token,
+                &cfg.broker,
+                &cfg.consumer_group,
+                &cfg.topic,
+                &cfg.warp10_url,
+                &cfg.warp10_token,
             )
         }
         Cmd::SendKafka {
