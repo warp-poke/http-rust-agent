@@ -24,7 +24,7 @@ use warp10::Label;
 use std::collections::HashMap;
 
 //FIXME: send back an error
-fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str, host: &str, zone: &str) -> Result<(), String> {
+fn check_and_post(payload: &[u8], host: &str, zone: &str) -> Result<(), String> {
     let r: serde_json::Result<RequestBenchEvent> = serde_json::from_slice(payload);
     match r {
         Ok(request) => {
@@ -34,6 +34,9 @@ fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str, host: &s
                 Label::new("host", host),
                 Label::new("zone", zone),
             ];
+
+            let endpoint = request.warp10_endpoint.clone();
+            let token = request.token.clone();
 
             let result = BufferedDomainTestResult {
                 domain_test_results: vec![check],
@@ -46,7 +49,7 @@ fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str, host: &s
 
             println!("sending to warp10: {:?}", data);
 
-            let res = warp10_post(data, warp10_url.to_string(), warp10_token.to_string());
+            let res = warp10_post(data, endpoint, token);
             println!("{:#?}", res);
             match res {
                 Ok(_) => Ok(()),
@@ -66,15 +69,12 @@ fn check_and_post(payload: &[u8], warp10_url: &str, warp10_token: &str, host: &s
 // Moving each message from one stage of the pipeline to next one is handled by the event loop,
 // that runs on a single thread. The expensive CPU-bound computation is handled by the `CpuPool`,
 // without blocking the event loop.
-pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, warp10_url: &str, warp10_token: &str, username: Option<String>, password: Option<String>, host: String, zone: String) {
+pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, username: Option<String>, password: Option<String>, host: String, zone: String) {
     // Create the event loop. The event loop will run on a single thread and drive the pipeline.
     let mut core = Core::new().unwrap();
 
     // Create the CPU pool, for CPU-intensive message processing.
     let cpu_pool = Builder::new().pool_size(4).create();
-
-    let url = warp10_url.to_string();
-    let token = warp10_token.to_string();
 
     // Create the `StreamConsumer`, to receive the messages from the topic in form of a `Stream`.
     let mut consumer = ClientConfig::new();
@@ -123,8 +123,6 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
             info!("Enqueuing message for computation");
             let owned_message = msg.detach();
 
-            let u = url.clone();
-            let t = token.clone();
             let h = host.clone();
             let z = zone.clone();
             // Create the inner pipeline, that represents the processing of a single event.
@@ -133,7 +131,7 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
                     // Take ownership of the message, and runs an expensive computation on it,
                     // using one of the threads of the `cpu_pool`.
                     if let Some(payload) = owned_message.payload() {
-                      check_and_post(payload, &u, &t, &h, &z)
+                      check_and_post(payload, &h, &z)
                     } else {
                       Err(String::from("no payload"))
                     }
@@ -155,7 +153,7 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, war
     info!("Stream processing terminated");
 }
 
-pub fn send_message(brokers: &str, output_topic: &str, test_url: &str, username: Option<String>, password: Option<String>) {
+pub fn send_message(brokers: &str, output_topic: &str, domain_name: &str, warp10_endpoint: &str, token: &str, test_url: &str, username: Option<String>, password: Option<String>) {
     println!("brokers: {}", brokers);
 
     let mut producer = ClientConfig::new();
@@ -178,6 +176,9 @@ pub fn send_message(brokers: &str, output_topic: &str, test_url: &str, username:
 
     let mut rbe = RequestBenchEvent::default();
     //rbe.labels.insert(String::from("domain"), test_url.to_string());
+    rbe.domain_name = domain_name.to_string();
+    rbe.warp10_endpoint = warp10_endpoint.to_string();
+    rbe.token = token.to_string();
     rbe.url = test_url.to_string();
     let result = serde_json::to_string(&rbe).unwrap();
     info!("sending\n{}", result);

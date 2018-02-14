@@ -78,6 +78,12 @@ enum Cmd {
         username: Option<String>,
         #[structopt(short = "p", long = "sasl-password", help = "SASL password")]
         password: Option<String>,
+        #[structopt(long = "warp10-url", default_value = "http://localhost:8080/", help = "Url of the Warp10 datastore")]
+        warp10_url: String,
+        #[structopt(long = "warp10-token", help = "Token to write in the Warp10 datastore")]
+        warp10_token: String,
+        #[structopt(long = "url", help = "url")]
+        url: String,
     },
 }
 
@@ -233,12 +239,10 @@ fn main() {
                 &cfg.broker,
                 &cfg.consumer_group,
                 &cfg.topic,
-                &cfg.warp10_url,
-                &cfg.warp10_token,
                 cfg.username,
                 cfg.password,
                 cfg.host,
-                cfg.zone,
+                cfg.zone
             )
         }
         Cmd::SendKafka {
@@ -246,9 +250,12 @@ fn main() {
             broker,
             topic,
             username,
-            password
+            password,
+            warp10_url,
+            warp10_token,
+            url,
         } => {
-            send_message(&broker, &topic, &domain_name, username, password);
+            send_message(&broker, &topic, &domain_name, &warp10_url, &warp10_token, &url, username, password);
         }
     }
 
