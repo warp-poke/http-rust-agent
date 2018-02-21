@@ -46,7 +46,7 @@ pub fn load_from_path(path: &str) -> io::Result<Config> {
     match toml::from_str(&data) {
       Ok(config) => Ok(config),
       Err(e) => {
-        println!("decoding error: {:?}", e);
+        error!("decoding error: {:?}", e);
         Err(Error::new(
           ErrorKind::InvalidData,
           format!("decoding error: {:?}", e))

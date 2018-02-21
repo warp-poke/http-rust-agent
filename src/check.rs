@@ -28,13 +28,13 @@ pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
         let mut rng = thread_rng();
         let animal = rng.choose(ANIMALS).unwrap();
 
-        println!("{}  - {} ------", animal, url);
-        println!("{}  --- Status: {}", animal, res.status());
-        println!("{}  --- Headers:", animal);
+        debug!("{}  - {} ------", animal, url);
+        debug!("{}  --- Status: {}", animal, res.status());
+        debug!("{}  --- Headers:", animal);
         for h in res.headers().iter() {
-            println!("{}  ----- {}: {:?}", animal, h.name(), h.value_string());
+            debug!("{}  ----- {}: {:?}", animal, h.name(), h.value_string());
         }
-        println!("{}  --- Duration: {}", animal, dur);
+        debug!("{}  --- Duration: {}", animal, dur);
 
     }
 

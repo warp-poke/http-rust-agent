@@ -195,11 +195,11 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
         labels: Vec::with_capacity(3),
     };
 
-    println!("result:\n{:#?}", result);
+    debug!("result:\n{:#?}", result);
 
     let data: Vec<warp10::Data> = result.into();
 
-    println!("data:\n{:#?}", data);
+    debug!("data:\n{:#?}", data);
 
     data
 }
@@ -215,10 +215,6 @@ fn main() {
     env_logger::init();
     let args = Opt::from_args();
 
-    if args.debug {
-        println!("CLI arguments parsing : {:#?}", args);
-    }
-
     let cloned_args = args.clone();
 
     match args.cmd {
@@ -231,7 +227,7 @@ fn main() {
             let data = run(domain_name.as_str(), cloned_args);
 
             let res = warp10_post(data, warp10_url, warp10_token);
-            println!("{:#?}", res);
+            info!("result warp10 post: {:#?}", res);
         }
         Cmd::Daemon { path_config_file } => {
             let cfg = Config::new(&path_config_file);

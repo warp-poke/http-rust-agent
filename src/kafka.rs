@@ -28,7 +28,7 @@ fn check_and_post(payload: &[u8], host: &str, zone: &str) -> Result<(), String> 
     let r: serde_json::Result<RequestBenchEvent> = serde_json::from_slice(payload);
     match r {
         Ok(request) => {
-            println!("got request: {:#?}", request);
+            debug!("got request: {:#?}", request);
             let check = run_check_for_url(&request.url, true);
             let labels = vec![
                 Label::new("host", host),
@@ -47,10 +47,10 @@ fn check_and_post(payload: &[u8], host: &str, zone: &str) -> Result<(), String> 
 
             let mut data: Vec<warp10::Data> = result.into();
 
-            println!("sending to warp10: {:?}", data);
+            info!("sending to warp10: {:?}", data);
 
             let res = warp10_post(data, endpoint, token);
-            println!("{:#?}", res);
+            info!("result sending to warp10: {:#?}", res);
             match res {
                 Ok(_) => Ok(()),
                 Err(e) => Err(format!("{:?}", e)),
@@ -154,8 +154,6 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
 }
 
 pub fn send_message(brokers: &str, output_topic: &str, domain_name: &str, warp10_endpoint: &str, token: &str, test_url: &str, username: Option<String>, password: Option<String>) {
-    println!("brokers: {}", brokers);
-
     let mut producer = ClientConfig::new();
 
     if let (Some(user), Some(pass)) = (username, password) {
