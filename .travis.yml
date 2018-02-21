@@ -18,13 +18,14 @@ notifications:
 addons:
   apt:
     packages:
+      - libssl-dev
+      - libsasl2-dev
       - libcurl4-openssl-dev
       - libelf-dev
       - libdw-dev
       - binutils-dev
       - cmake
       - librdkafka-dev
-      - librdkafka1
     sources:
       - kalakris-cmake
 
