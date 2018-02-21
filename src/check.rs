@@ -1,4 +1,5 @@
-use super::{ANIMALS, DomainTestResult};
+use super::DomainTestResult;
+use logs::ANIMALS;
 use rand::{Rng, thread_rng};
 use reqwest::{Client, Result};
 use reqwest::header::ContentLength;

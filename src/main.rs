@@ -30,6 +30,7 @@ use time::Duration;
 mod config;
 mod kafka;
 mod check;
+mod logs;
 
 use config::Config;
 use check::run_check_for_url;
@@ -86,45 +87,6 @@ enum Cmd {
         url: String,
     },
 }
-
-pub const ANIMALS: &'static [&'static str] = &[
-    "🐶",
-    "🐱",
-    "🐭",
-    "🐹",
-    "🦊",
-    "🐻",
-    "🐼",
-    "🐨",
-    "🐯",
-    "🦁",
-    "🐮",
-    "🐷",
-    "🐸",
-    "🐒",
-    "🦆",
-    "🦉",
-    "🦀",
-    "🐡",
-    "🦑",
-    "🐙",
-    "🦎",
-    "🐿",
-    "🐕",
-    "🐁",
-    "🐝",
-    "🐞",
-    "🦋",
-    "🦔",
-    "🕊",
-    "🦃",
-    "🐩",
-    "🦒",
-    "🐓",
-    "🐳",
-    "🙈",
-    "🐥",
-];
 
 #[derive(Debug)]
 pub struct DomainTestResult {
