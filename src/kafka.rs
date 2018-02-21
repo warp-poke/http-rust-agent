@@ -89,16 +89,11 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
         "Can't subscribe to specified topic",
     );
 
-
-    // Create a handle to the core, that will be used to provide additional asynchronous work
-    // to the event loop.
     let handle = core.handle();
 
-    // Create the outer pipeline on the message stream.
     let processed_stream = consumer
         .start()
         .filter_map(|result| {
-            // Filter out errors
             match result {
                 Ok(msg) => Some(msg),
                 Err(kafka_error) => {
@@ -108,36 +103,29 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
             }
         })
         .for_each(move |msg| {
-            // Process each message
             info!("Enqueuing message for computation");
             let owned_message = msg.detach();
 
             let h = host.clone();
             let z = zone.clone();
-            // Create the inner pipeline, that represents the processing of a single event.
             let process_message = cpu_pool
                 .spawn(lazy(move || {
-                    // Take ownership of the message, and runs an expensive computation on it,
-                    // using one of the threads of the `cpu_pool`.
+
                     if let Some(payload) = owned_message.payload() {
                       check_and_post(payload, &h, &z)
                     } else {
                       Err(String::from("no payload"))
                     }
-                    //Ok::<_, ()>(())
                 }))
                 .or_else(|err| {
-                    // In case of error, this closure will be executed instead.
                     warn!("Error while processing message: {:?}", err);
                     Ok(())
                 });
-            // Spawns the inner pipeline in the same event pool.
             handle.spawn(process_message);
             Ok(())
         });
 
     info!("Starting event loop");
-    // Runs the event pool until the consumer terminates.
     core.run(processed_stream).unwrap();
     info!("Stream processing terminated");
 }
@@ -162,7 +150,6 @@ pub fn send_message(brokers: &str, output_topic: &str, domain_name: &str, warp10
     let topic_name = output_topic.to_string();
 
     let mut rbe = RequestBenchEvent::default();
-    //rbe.labels.insert(String::from("domain"), test_url.to_string());
     rbe.domain_name = domain_name.to_string();
     rbe.warp10_endpoint = warp10_endpoint.to_string();
     rbe.token = token.to_string();
@@ -173,13 +160,10 @@ pub fn send_message(brokers: &str, output_topic: &str, domain_name: &str, warp10
     producer
         .send_copy::<String, ()>(&topic_name, None, Some(&result), None, None, 1000)
         .and_then(|d_report| {
-            // Once the message has been produced, print the delivery report and terminate
-            // the pipeline.
             info!("Delivery report for result: {:?}", d_report);
             Ok(())
         })
         .or_else(|err| {
-            // In case of error, this closure will be executed instead.
             warn!("Error while processing message: {:?}", err);
             Ok::<_, ()>(())
         }).wait().unwrap();
