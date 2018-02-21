@@ -34,7 +34,7 @@ before_install:
   - cd librdkafka-0.11.3
   - ./configure
   - make
-  - make install
+  - sudo make install
   - cd ..
 
 script:
