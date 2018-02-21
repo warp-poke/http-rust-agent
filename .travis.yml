@@ -18,6 +18,8 @@ notifications:
 addons:
   apt:
     packages:
+      - librdkafka1
+      - librdkafka-dev
       - libssl-dev
       - libsasl2-dev
       - libcurl4-openssl-dev
@@ -25,7 +27,6 @@ addons:
       - libdw-dev
       - binutils-dev
       - cmake
-      - librdkafka-dev
     sources:
       - kalakris-cmake
 
