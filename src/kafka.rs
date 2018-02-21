@@ -61,22 +61,11 @@ fn check_and_post(payload: &[u8], host: &str, zone: &str) -> Result<(), String> 
     }
 }
 
-// Creates all the resources and runs the event loop. The event loop will:
-//   1) receive a stream of messages from the `StreamConsumer`.
-//   2) filter out eventual Kafka errors.
-//   3) send the message to a thread pool for processing.
-//   4) produce the result to the output topic.
-// Moving each message from one stage of the pipeline to next one is handled by the event loop,
-// that runs on a single thread. The expensive CPU-bound computation is handled by the `CpuPool`,
-// without blocking the event loop.
 pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, username: Option<String>, password: Option<String>, host: String, zone: String) {
-    // Create the event loop. The event loop will run on a single thread and drive the pipeline.
     let mut core = Core::new().unwrap();
 
-    // Create the CPU pool, for CPU-intensive message processing.
     let cpu_pool = Builder::new().pool_size(4).create();
 
-    // Create the `StreamConsumer`, to receive the messages from the topic in form of a `Stream`.
     let mut consumer = ClientConfig::new();
 
     if let (Some(user), Some(pass)) = (username, password) {

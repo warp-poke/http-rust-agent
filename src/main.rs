@@ -223,7 +223,6 @@ fn main() {
             warp10_url,
             warp10_token,
         } => {
-            //send_message(&broker, &topic, &domain_name);
             let data = run(domain_name.as_str(), cloned_args);
 
             let res = warp10_post(data, warp10_url, warp10_token);
