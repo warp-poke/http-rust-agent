@@ -15,13 +15,13 @@ This agent is a kafka `consumer` that read data from kafka and _format/add other
 
 # Requirements
 
-You need to install this packages:
+You need to install these packages:
 
 - libssl-dev
 - libsasl2-dev
 - [librdkafka](https://github.com/edenhill/librdkafka) v0.11.3
 
-NOTE: If you distribution don't provide a `librdkafka` package, follow this [instructions](https://github.com/edenhill/librdkafka#building) to recompile and install librdkafka.
+NOTE: If your distribution doesn't provide a `librdkafka` package, follow these [instructions](https://github.com/edenhill/librdkafka#building) to compile and install librdkafka.
 
 # Build
 
@@ -30,6 +30,12 @@ NOTE: If you distribution don't provide a `librdkafka` package, follow this [ins
 # Run it
 
 You can configure the `poke-agent` by environment variables or by a `toml` configuration file. (See config.toml).
+
+A default config.toml file is provided, you should update the relevant fields.
+
+If using a Kafka with SASL auth, set `username` and `password`. It will
+automatically set the `PLAIN` mechanism for SASL and `SASL_SSL` for the
+security protocol.
 
 Possible environment variables are:
 
