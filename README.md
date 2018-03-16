@@ -25,7 +25,7 @@ NOTE: If your distribution doesn't provide a `librdkafka` package, follow these 
 
 # Build
 
-`cargo build` (add ̀`--release` for production).
+`cargo build` (add `--release` for production).
 
 # Run it
 
