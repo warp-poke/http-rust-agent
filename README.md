@@ -3,7 +3,7 @@
 [![Join the chat at https://gitter.im/warp-poke/Lobby](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/warp-poke/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Build Status](https://travis-ci.org/warp-poke/http-rust-agent.svg?branch=master)](https://travis-ci.org/warp-poke/http-rust-agent)
 
-This agent is a kafka `consumer` that read data from kafka and _format/add other_ data to forward them to the `warp10` cluster.
+This agent is a kafka `consumer` which reads data from kafka, checks response time and status for each service and sends that data to Warp10.
 
 ```
 +--------+          +-------------+          +----- ----+
@@ -29,7 +29,7 @@ NOTE: If your distribution doesn't provide a `librdkafka` package, follow these 
 
 # Run it
 
-You can configure the `poke-agent` by environment variables or by a `toml` configuration file. (See config.toml).
+You can configure this agent with environment variables or with a `toml` configuration file. (See config.toml).
 
 A default config.toml file is provided, you should update the relevant fields.
 
