@@ -49,7 +49,7 @@ Possible environment variables are:
 - HOST
 - ZONE
 
-## Production
+## Production
 
 `RUSTLOG=info poke-agent daemon -c <path of the config file>`
 
