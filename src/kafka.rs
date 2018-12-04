@@ -3,7 +3,7 @@ use futures::Stream;
 use futures::future::lazy;
 
 use futures_cpupool::Builder;
-use tokio_core::reactor::Core;
+use tokio::executor::current_thread::CurrentThread;
 use warp10;
 
 use rdkafka::Message;
@@ -62,7 +62,7 @@ fn check_and_post(payload: &[u8], host: &str, zone: &str) -> Result<(), String> 
 }
 
 pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, username: Option<String>, password: Option<String>, host: String, zone: String) {
-    let mut core = Core::new().unwrap();
+    let mut io_loop = CurrentThread::new();
 
     let cpu_pool = Builder::new().pool_size(4).create();
 
@@ -89,7 +89,7 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
         "Can't subscribe to specified topic",
     );
 
-    let handle = core.handle();
+    let handle = io_loop.handle();
 
     let processed_stream = consumer
         .start()
@@ -126,7 +126,7 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
         });
 
     info!("Starting event loop");
-    core.run(processed_stream).unwrap();
+    io_loop.block_on(processed_stream).unwrap();
     info!("Stream processing terminated");
 }
 

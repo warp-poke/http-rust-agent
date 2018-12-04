@@ -11,7 +11,7 @@ extern crate log;
 extern crate env_logger;
 extern crate futures;
 extern crate futures_cpupool;
-extern crate tokio_core;
+extern crate tokio;
 extern crate uuid;
 extern crate warp10;
 extern crate rdkafka;
