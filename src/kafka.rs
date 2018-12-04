@@ -10,7 +10,7 @@ use rdkafka::Message;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
-use rdkafka::producer::FutureProducer;
+use rdkafka::producer::{FutureProducer, FutureRecord};
 
 use serde_json;
 use time;
@@ -158,7 +158,7 @@ pub fn send_message(brokers: &str, output_topic: &str, domain_name: &str, warp10
     info!("sending\n{}", result);
 
     producer
-        .send_copy::<String, ()>(&topic_name, None, Some(&result), None, None, 1000)
+        .send::<(), String>(FutureRecord::to(&topic_name).payload(&result), 1000)
         .and_then(|d_report| {
             info!("Delivery report for result: {:?}", d_report);
             Ok(())

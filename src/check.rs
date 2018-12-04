@@ -2,7 +2,7 @@ use super::DomainTestResult;
 use logs::ANIMALS;
 use rand::{Rng, thread_rng};
 use reqwest::{Client, Result};
-use reqwest::header::ContentLength;
+use reqwest::header::CONTENT_LENGTH;
 use time::SteadyTime;
 
 pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
@@ -17,11 +17,9 @@ pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
         http_status: res.status(),
         answer_time: dur,
         content_length: res.headers()
-            .get::<ContentLength>()
-            .cloned()
-            .map(|ct| match ct {
-                ContentLength(u) => u,
-            })
+            .get(CONTENT_LENGTH)
+            .and_then(|ct_len| ct_len.to_str().ok()
+            .and_then(|ct_len| ct_len.parse().ok()))
             .unwrap_or(0u64),
     };
 
@@ -32,8 +30,8 @@ pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
         debug!("{}  - {} ------", animal, url);
         debug!("{}  --- Status: {}", animal, res.status());
         debug!("{}  --- Headers:", animal);
-        for h in res.headers().iter() {
-            debug!("{}  ----- {}: {:?}", animal, h.name(), h.value_string());
+        for (name, value) in res.headers().iter() {
+            debug!("{}  ----- {}: {:?}", animal, name, value.to_str());
         }
         debug!("{}  --- Duration: {}", animal, dur);
 
