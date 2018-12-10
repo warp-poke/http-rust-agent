@@ -1,14 +1,18 @@
 use super::DomainTestResult;
 use logs::ANIMALS;
 use rand::{Rng, thread_rng};
-use reqwest::{Client, Result};
-use reqwest::header::CONTENT_LENGTH;
+use reqwest::{Client, Result, header::{USER_AGENT, CONTENT_LENGTH}};
 use time::SteadyTime;
+
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
     let client = Client::new();
     let start = SteadyTime::now();
-    let res = client.get(url).send()?;
+    let res = client
+        .get(url)
+        .header(USER_AGENT, format!("Poke / {}", VERSION))
+        .send()?;
     let dur = SteadyTime::now() - start;
 
     //  build infos
