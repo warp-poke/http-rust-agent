@@ -11,7 +11,7 @@ pub fn run_check_for_url(url: &str, verbose: bool) -> Result<DomainTestResult> {
     let start = SteadyTime::now();
     let res = client
         .get(url)
-        .header(USER_AGENT, format!("Poke / {}", VERSION))
+        .header(USER_AGENT, format!("Poke/{}", VERSION))
         .send()?;
     let dur = SteadyTime::now() - start;
 
