@@ -1,40 +1,40 @@
-extern crate structopt;
-#[macro_use]
-extern crate structopt_derive;
-extern crate reqwest;
-extern crate time;
-extern crate rand;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate log;
 extern crate env_logger;
 extern crate futures;
 extern crate futures_cpupool;
-extern crate tokio;
-extern crate warp10;
+extern crate lazy_static;
+#[macro_use]
+extern crate log;
+extern crate prometheus;
+extern crate rand;
 extern crate rdkafka;
-
+extern crate reqwest;
 extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
+extern crate structopt;
+extern crate structopt_derive;
+extern crate time;
+extern crate tokio;
 extern crate toml;
+extern crate warp;
+extern crate warp10;
 
-use std::collections::HashMap;
-use structopt::StructOpt;
+use std::convert::From;
 
 use reqwest::Result;
-use std::convert::From;
+use structopt::StructOpt;
 use time::Duration;
+use warp10::Label;
+
+use check::run_check_for_url;
+use config::Config;
+use kafka::{run_async_processor, send_message};
 
 mod config;
 mod kafka;
 mod check;
 mod logs;
-
-use config::Config;
-use check::run_check_for_url;
-use kafka::{run_async_processor, send_message};
-use warp10::Label;
 
 #[derive(StructOpt, PartialEq, Debug, Clone)]
 #[structopt(name = "poke-agent", about = "HTTP poke agent")]
@@ -102,7 +102,6 @@ impl From<BufferedDomainTestResult> for Vec<warp10::Data> {
 
         for result in item.domain_test_results.into_iter() {
             if let Ok(dtr) = result {
-
                 res.push(warp10::Data::new(
                     item.timestamp,
                     None,
@@ -147,7 +146,7 @@ fn run(domain_name: &str, args: Opt) -> Vec<warp10::Data> {
     let http = run_check_for_url(format!("http://{}", domain_name).as_str(), args.verbose);
     let https = run_check_for_url(format!("https://{}", domain_name).as_str(), args.verbose);
 
-    let mut rbe = RequestBenchEvent::default();
+    let rbe = RequestBenchEvent::default();
 
     let result = BufferedDomainTestResult {
         domain_test_results: vec![http, https],
@@ -198,7 +197,7 @@ fn main() {
                 cfg.username,
                 cfg.password,
                 cfg.host,
-                cfg.zone
+                cfg.zone,
             )
         }
         Cmd::SendKafka {
@@ -214,5 +213,4 @@ fn main() {
             send_message(&broker, &topic, &domain_name, &warp10_url, &warp10_token, &url, username, password);
         }
     }
-
 }

@@ -1,27 +1,47 @@
+use std::thread;
+
 use futures::Future;
-use futures::Stream;
 use futures::future::lazy;
-
+use futures::Stream;
 use futures_cpupool::Builder;
-use tokio::executor::current_thread::CurrentThread;
-use warp10;
-
-use rdkafka::Message;
+use lazy_static::lazy_static;
+use prometheus::{Counter, Encoder, opts, register_counter, TextEncoder};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::Consumer;
 use rdkafka::consumer::stream_consumer::StreamConsumer;
+use rdkafka::Message;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-
 use serde_json;
 use time;
-
-use BufferedDomainTestResult;
-use RequestBenchEvent;
-use check::run_check_for_url;
-use warp10_post;
+use tokio::executor::current_thread::CurrentThread;
+use warp::{Filter, path, serve};
+use warp10;
 use warp10::Label;
 
-use std::collections::HashMap;
+use BufferedDomainTestResult;
+use check::run_check_for_url;
+use RequestBenchEvent;
+use warp10_post;
+
+lazy_static! {
+    static ref KAFKA_ERROR_COUNTER: Counter = register_counter!(opts!(
+        "http_agent_kafka_error",
+        "Number of kafka errors"
+    ))
+    .expect("to create the http_agent_kafka_error counter");
+
+    static ref CHECK_ERROR_COUNTER: Counter = register_counter!(opts!(
+        "http_agent_check_error",
+        "Number of check errors"
+    ))
+    .expect("to create the http_agent_check_error counter");
+
+    static ref CHECK_COUNTER: Counter = register_counter!(opts!(
+        "http_agent_check",
+        "Number of check errors"
+    ))
+    .expect("to create the http_agent_check counter");
+}
 
 //FIXME: send back an error
 fn check_and_post(payload: &[u8], host: &str, zone: &str) -> Result<(), String> {
@@ -55,9 +75,8 @@ fn check_and_post(payload: &[u8], host: &str, zone: &str) -> Result<(), String> 
                 Ok(_) => Ok(()),
                 Err(e) => Err(format!("{:?}", e)),
             }
-        },
+        }
         Err(e) => Err(format!("{:?}", e)),
-
     }
 }
 
@@ -70,10 +89,10 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
 
     if let (Some(user), Some(pass)) = (username, password) {
         consumer
-          .set("security.protocol", "SASL_SSL")
-          .set("sasl.mechanisms", "PLAIN")
-          .set("sasl.username", &user)
-          .set("sasl.password", &pass);
+            .set("security.protocol", "SASL_SSL")
+            .set("sasl.mechanisms", "PLAIN")
+            .set("sasl.username", &user)
+            .set("sasl.password", &pass);
     }
 
     let consumer = consumer
@@ -97,6 +116,7 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
             match result {
                 Ok(msg) => Some(msg),
                 Err(kafka_error) => {
+                    KAFKA_ERROR_COUNTER.inc();
                     warn!("Error while receiving from Kafka: {:?}", kafka_error);
                     None
                 }
@@ -110,24 +130,41 @@ pub fn run_async_processor(brokers: &str, group_id: &str, input_topic: &str, use
             let z = zone.clone();
             let process_message = cpu_pool
                 .spawn(lazy(move || {
-
+                    CHECK_COUNTER.inc();
                     if let Some(payload) = owned_message.payload() {
-                      check_and_post(payload, &h, &z)
+                        check_and_post(payload, &h, &z)
                     } else {
-                      Err(String::from("no payload"))
+                        Err(String::from("no payload"))
                     }
                 }))
                 .or_else(|err| {
+                    CHECK_ERROR_COUNTER.inc();
                     warn!("Error while processing message: {:?}", err);
                     Ok(())
                 });
-            handle.spawn(process_message);
+            handle.spawn(process_message).expect("to not fail to process a message");
             Ok(())
         });
+
+    let metrics = path!("metrics")
+        .map(|| {
+            let encoder = TextEncoder::new();
+            let metric_families = prometheus::gather();
+            let mut buffer = vec![];
+            encoder.encode(&metric_families, &mut buffer).unwrap();
+            buffer
+        });
+
+    let metrics_thread = thread::spawn(move || {
+        serve(metrics)
+            .run(([127, 0, 0, 1], 3030));
+    });
 
     info!("Starting event loop");
     io_loop.block_on(processed_stream).unwrap();
     info!("Stream processing terminated");
+
+    metrics_thread.join().expect("to join the metrics server thread");
 }
 
 pub fn send_message(brokers: &str, output_topic: &str, domain_name: &str, warp10_endpoint: &str, token: &str, test_url: &str, username: Option<String>, password: Option<String>) {
@@ -135,10 +172,10 @@ pub fn send_message(brokers: &str, output_topic: &str, domain_name: &str, warp10
 
     if let (Some(user), Some(pass)) = (username, password) {
         producer
-          .set("security.protocol", "SASL_SSL")
-          .set("sasl.mechanisms", "PLAIN")
-          .set("sasl.username", &user)
-          .set("sasl.password", &pass);
+            .set("security.protocol", "SASL_SSL")
+            .set("sasl.mechanisms", "PLAIN")
+            .set("sasl.username", &user)
+            .set("sasl.password", &pass);
     }
 
     let producer = producer
