@@ -19,7 +19,7 @@ You need to install these packages:
 
 - libssl-dev
 - libsasl2-dev
-- [librdkafka](https://github.com/edenhill/librdkafka) v0.11.3
+- [librdkafka](https://github.com/edenhill/librdkafka) v0.11.4
 - lib32z1-dev
 - pkg-config
 

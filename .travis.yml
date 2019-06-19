@@ -14,7 +14,6 @@ notifications:
     on_failure: always
     on_start: false
 
-
 addons:
   apt:
     packages:
@@ -29,17 +28,29 @@ addons:
     sources:
       - kalakris-cmake
 
-
 before_install:
-  - wget https://github.com/edenhill/librdkafka/archive/v0.11.3.tar.gz
-  - tar -xvf v0.11.3.tar.gz
-  - cd librdkafka-0.11.3
-  - ./configure
+  - wget https://github.com/edenhill/librdkafka/archive/v0.11.4.tar.gz
+  - tar -xvf v0.11.4.tar.gz
+  - cd librdkafka-0.11.4
+  - "./configure"
   - make
   - sudo make install
   - cd ..
 
-
 script:
   - eval cargo build --verbose
   - eval cargo test --verbose
+
+before_deploy:
+  - eval cargo build --verbose --release
+
+deploy:
+  provider: releases
+  skip_cleanup: true
+  api_key:
+    secure: imsCmHCBd27eALBVfnibULdzww18Z7waywA9AecqTLdBMmJPuATxThq63ftn7dHCxd4naR/rpQ9c13TSRvjQ/Fk5IXPg62IGlmQTAZRxLz6NHuV4KLCk8A/Yn9hZ5qy3Yn5VGoBMBGl7U7KX0EaxUMFY1yL+H6NKQufyYSbxCDBQHAxtfS9RRmoQiWk9pJhrUlmkiokFT2CuUVnF2H+aM/I4sZBr3kFqRXgpzLp6HEjgT1JpvtkKAbxbNsYbLsmO+P+NI1a7GkR8jsVV6ieXsgoKAiP/pabGMcvB/gd8U12yQC5RzdSeo+fC2aq1PjWpFGLIRT91xK34t6H3VkzCDXbk2vRgciUQ2W0/BOVoCballGckHCUGQ4XFdK+8tpyXfaHzcM8iZo8OwJ8Bh9xbKxTrUEChWnGeXgynC7E2wsiLHxjnxMpPJFxn34w06ar+XQmQvbKFvi/DhA+DHvRi9cYXMbANpBdfWgJP5z3qjp4Ee4jUDm6A+I3qjonCmdnlzNqdh+EVioX0ZLM4Gx/zR8K8Ub22m4dKVhNzFuL9Uweg6b39aU3ZMC59490m+WVKwar0jTZhq7SmcQVUt+TUuymMVnW/0ogosPPJ7lM+jIzA92++GQmxfwN48eA0b27TEFoINBh0w/MafgI514N/MnZ43fFyHfrrmsnEPqa0Kmo=
+  file: ./target/release/poke-agent
+  overwrite: true  
+  on:
+    tags: true
+    repo: warp-poke/http-rust-agent
